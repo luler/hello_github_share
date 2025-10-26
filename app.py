@@ -16,6 +16,23 @@ from database import SessionLocal, engine, get_db
 from llm_service import generate_repo_summary
 from models import Base, Category, Repository, Admin, Config
 
+
+# 仓库对象转换公共函数
+def repository_to_dict(repo: Repository) -> dict:
+    """将Repository对象转换为字典"""
+    return {
+        "id": repo.id,
+        "name": repo.name,
+        "owner": repo.owner,
+        "repo_name": repo.repo_name,
+        "github_url": repo.github_url,
+        "category_id": repo.category_id,
+        "category_name": repo.category.name if repo.category else None,
+        "card_url": repo.card_url,
+        "description": repo.description
+    }
+
+
 # 加载 .env 文件
 load_dotenv()
 
@@ -315,24 +332,75 @@ def _is_admin_request(request: Request, db: Session) -> bool:
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request, category_id: Optional[int] = Query(None), db: Session = Depends(get_db)):
-    # 首页显示仓库列表，默认按最新入库时间排序
+    # 首页显示仓库列表，使用前端无限滚动加载，这里只返回空的初始页面
     categories = db.query(Category).filter(Category.parent_id.is_(None)).all()
-
-    query = db.query(Repository)
-    if category_id:
-        query = query.filter(Repository.category_id == category_id)
-
-    # 默认按最新入库时间排序
-    repositories = query.order_by(Repository.added_at.desc()).all()
 
     return templates.TemplateResponse("repositories.html", {
         "request": request,
         "categories": categories,
-        "repositories": repositories,
+        "repositories": [],  # 初始为空，由前端AJAX加载
         "selected_category": category_id,
         "show_all": False,
         "is_admin": _is_admin_request(request, db)
     })
+
+
+@app.get("/api/repositories")
+async def list_repositories(
+        q: Optional[str] = Query(None),
+        category_id: Optional[int] = Query(None),
+        page: int = Query(1, ge=1),
+        page_size: int = Query(50, ge=1, le=100),
+        db: Session = Depends(get_db)
+):
+    """公开的仓库列表接口，支持搜索、分页和分类筛选
+
+    参数:
+        q: 搜索关键词，模糊匹配name、owner、repo_name、description
+        category_id: 分类ID筛选
+        page: 页码，从1开始
+        page_size: 每页数量，默认50，最大100
+
+    返回:
+        items: 仓库列表
+        total: 总数量
+        page: 当前页码
+        page_size: 每页数量
+        has_more: 是否还有更多数据
+    """
+    query = db.query(Repository)
+
+    # 搜索筛选
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        query = query.filter(
+            (Repository.name.ilike(like)) |
+            (Repository.owner.ilike(like)) |
+            (Repository.repo_name.ilike(like)) |
+            (Repository.description.ilike(like))
+        )
+
+    # 分类筛选
+    if category_id:
+        query = query.filter(Repository.category_id == category_id)
+
+    # 按最新入库时间排序
+    query = query.order_by(Repository.added_at.desc())
+
+    # 获取总数
+    total = query.count()
+
+    # 分页
+    offset = (page - 1) * page_size
+    repositories = query.offset(offset).limit(page_size).all()
+
+    return {
+        "items": [repository_to_dict(r) for r in repositories],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "has_more": (page * page_size) < total
+    }
 
 
 @app.post("/api/repositories")
@@ -503,13 +571,13 @@ async def admin_list_repositories(
     total = query.count()
     items = query.order_by(Repository.added_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
-    def to_obj(repo: Repository):
-        return {"id": repo.id, "name": repo.name, "owner": repo.owner, "repo_name": repo.repo_name,
-                "github_url": repo.github_url,
-                "category_id": repo.category_id, "category_name": repo.category.name if repo.category else None,
-                "card_url": repo.card_url, "description": repo.description}
-
-    return {"items": [to_obj(r) for r in items], "total": total, "page": page, "page_size": page_size}
+    return {
+        "items": [repository_to_dict(r) for r in items],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "has_more": (page * page_size) < total
+    }
 
 
 @app.put("/api/repositories/{repository_id}")
