@@ -1,0 +1,53 @@
+# Docker 相关
+.dockerignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 虚拟环境
+venv/
+ENV/
+env/
+
+# 数据库
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# 环境变量
+.env
+
+# 日志
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
+
+# 文档和示例
+README.md
+.env.example
+LICENSE
+
+# Docker 文件本身
+Dockerfile
+docker-compose.yml
+.dockerignore

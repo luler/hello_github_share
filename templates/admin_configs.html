@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}配置管理 - GitHub 项目导航{% endblock %}
+
+{% block nav %}
+<a href="/">首页</a>
+<a href="/admin/dashboard">管理后台</a>
+<a href="/admin/logout" class="logout-link">退出</a>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="admin-header">
+        <h2>配置管理</h2>
+        <div class="admin-actions">
+            <a href="/admin/dashboard" class="btn btn-secondary">返回后台</a>
+        </div>
+    </div>
+
+    <div class="admin-section">
+        <h3>系统配置</h3>
+        <div id="alert-container"></div>
+
+        <form id="config-form">
+            <div class="config-group">
+                <h4 style="color: var(--primary); margin-bottom: 1rem; font-size: 1.1rem;">OpenAI 配置</h4>
+
+                <div class="form-group">
+                    <label>Base URL</label>
+                    <input type="text" name="openai_base_url" id="openai_base_url" placeholder="https://api.openai.com/v1">
+                </div>
+
+                <div class="form-group">
+                    <label>API Key</label>
+                    <input type="password" name="openai_api_key" id="openai_api_key" placeholder="sk-...">
+                </div>
+
+                <div class="form-group">
+                    <label>模型名称</label>
+                    <input type="text" name="openai_model" id="openai_model" placeholder="gpt-4o-mini">
+                </div>
+
+                <div class="form-group">
+                    <label>提示词 Prompt</label>
+                    <textarea name="openai_prompt" id="openai_prompt" rows="4" placeholder="请用中文总结这个GitHub项目的主要功能和特点，限制在200字以内。"></textarea>
+                </div>
+            </div>
+
+            <div class="config-group" style="margin-top: 2rem; padding-top: 2rem; border-top: 1px solid var(--gray-200);">
+                <h4 style="color: var(--primary); margin-bottom: 1rem; font-size: 1.1rem;">Jina.ai 配置</h4>
+
+                <div class="form-group">
+                    <label>Jina API Key</label>
+                    <input type="password" name="jina_api_key" id="jina_api_key" placeholder="jina_...">
+                    <small style="color: var(--gray-500); font-size: 0.875rem;">用于爬取GitHub仓库内容</small>
+                </div>
+            </div>
+
+            <div style="margin-top: 2rem;">
+                <button type="submit" class="btn btn-primary">保存配置</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .config-group {
+        margin-bottom: 1.5rem;
+    }
+
+    #alert-container {
+        margin-bottom: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 加载配置
+    async function loadConfigs() {
+        try {
+            const response = await fetch('/api/admin/configs');
+            const configs = await response.json();
+
+            configs.forEach(config => {
+                const input = document.getElementById(config.key);
+                if (input) {
+                    input.value = config.value || '';
+                }
+            });
+        } catch (error) {
+            console.error('加载配置失败:', error);
+            showAlert('加载配置失败', 'error');
+        }
+    }
+
+    // 保存配置
+    document.getElementById('config-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const formData = new FormData(e.target);
+        const configs = {};
+
+        formData.forEach((value, key) => {
+            configs[key] = value;
+        });
+
+        try {
+            const response = await fetch('/api/admin/configs', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(configs)
+            });
+
+            if (response.ok) {
+                showAlert('配置保存成功', 'success');
+            } else {
+                const data = await response.json();
+                showAlert(data.detail || '保存配置失败', 'error');
+            }
+        } catch (error) {
+            console.error('保存配置失败:', error);
+            showAlert('保存配置失败', 'error');
+        }
+    });
+
+    // 显示提示
+    function showAlert(message, type) {
+        const container = document.getElementById('alert-container');
+        const alertClass = type === 'success' ? 'alert-success' : 'alert-error';
+        container.innerHTML = `<div class="alert ${alertClass}">${message}</div>`;
+
+        setTimeout(() => {
+            container.innerHTML = '';
+        }, 3000);
+    }
+
+    // 页面加载时加载配置
+    loadConfigs();
+</script>
+{% endblock %}

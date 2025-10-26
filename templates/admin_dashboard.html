@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+
+{% block title %}管理员仪表板 - GitHub 开源导航{% endblock %}
+
+{% block nav %}
+<a href="/">项目列表</a>
+<a href="/admin/dashboard" class="active">管理后台</a>
+<a href="/admin/logout" class="logout-link">退出</a>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Tab 样式 */
+    .tabs {
+        display: flex;
+        gap: 0;
+        margin: 1.5rem 0 0 0;
+        border-bottom: 2px solid var(--gray-200);
+    }
+
+    .tabs .btn {
+        border-radius: 8px 8px 0 0;
+        border-bottom: none;
+        background: var(--gray-100);
+        color: var(--gray-700);
+        padding: 0.75rem 1.5rem;
+        margin-bottom: -2px;
+        border: 2px solid transparent;
+        border-bottom: 2px solid var(--gray-200);
+        transition: all 0.2s ease;
+    }
+
+    .tabs .btn:hover {
+        background: var(--gray-200);
+    }
+
+    .tabs .btn.btn-success {
+        background: white;
+        color: var(--primary);
+        border-color: var(--gray-200);
+        border-bottom-color: white;
+        font-weight: 600;
+    }
+
+    .admin-section {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 0 8px 8px 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    /* 树形下拉选择器样式 */
+    .tree-dropdown-btn {
+        width: 100%;
+        padding: 0.5rem;
+        border: 1px solid var(--gray-200);
+        border-radius: 4px;
+        background: white;
+        cursor: pointer;
+        text-align: left;
+    }
+
+    /* 树形管理样式（分类管理tab） */
+    .categories-tree-container {
+        border: 1px solid var(--gray-200);
+        border-radius: 8px;
+        padding: 1rem;
+        background: var(--gray-50);
+        max-height: 600px;
+        overflow-y: auto;
+    }
+
+    .admin-category-tree {
+        list-style: none;
+        padding-left: 0;
+    }
+
+    .admin-category-subtree {
+        list-style: none;
+        padding-left: 1.5rem;
+        margin-top: 0.25rem;
+    }
+
+    .admin-tree-item {
+        margin: 0.25rem 0;
+    }
+
+    .admin-tree-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 8px;
+        background: white;
+        border: 1px solid var(--gray-200);
+        margin-bottom: 0.5rem;
+        transition: all 0.2s ease;
+    }
+
+    .admin-tree-row:hover {
+        background: var(--gray-100);
+        border-color: var(--gray-300);
+    }
+
+    .admin-tree-toggle,
+    .admin-tree-toggle-spacer {
+        width: 24px;
+        height: 24px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        border-radius: 6px;
+        flex-shrink: 0;
+    }
+
+    .admin-tree-toggle:hover {
+        background: var(--gray-200);
+    }
+
+    .admin-tree-toggle svg {
+        transition: transform 0.16s ease;
+    }
+
+    .admin-tree-item.expanded > .admin-tree-row .admin-tree-toggle svg {
+        transform: rotate(90deg);
+    }
+
+    .admin-tree-name {
+        flex: 1;
+        font-weight: 600;
+        color: var(--gray-900);
+        font-size: 0.95rem;
+    }
+
+    .admin-tree-stats {
+        display: flex;
+        gap: 0.5rem;
+        flex-shrink: 0;
+    }
+
+    .stat-badge {
+        background: var(--gray-100);
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        color: var(--gray-600);
+        white-space: nowrap;
+    }
+
+    .admin-tree-actions {
+        display: flex;
+        gap: 0.375rem;
+        flex-shrink: 0;
+    }
+
+    .admin-tree-actions .btn {
+        font-size: 0.75rem;
+        padding: 0.3rem 0.625rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="admin-header">
+        <div>
+            <h2>管理员仪表板</h2>
+        </div>
+        <div class="admin-actions">
+            <a href="/admin/configs" class="btn btn-success">配置管理</a>
+            <a href="/admin/logout" class="btn btn-secondary">退出登录</a>
+        </div>
+    </div>
+    <div class="tabs">
+        <button id="tabRepo" class="btn btn-success">仓库管理</button>
+        <button id="tabCategory" class="btn">分类管理</button>
+    </div>
+    <div id="repoTabContent" class="admin-section">
+        <h3>仓库管理（分页）</h3>
+        <div class="section-header">
+            <div style="display:flex; gap:0.75rem; flex-wrap: wrap; align-items: center;">
+                <input type="text" id="repo-q" placeholder="搜索名称/描述/owner/repo"
+                       style="padding:0.5rem 0.75rem; border:1px solid var(--gray-200); border-radius:8px; min-width:260px;"/>
+                <div style="position: relative;">
+                    <button type="button" id="repo-category-toggle" class="btn btn-secondary"
+                            style="min-width: 200px; justify-content: space-between; display: flex; align-items: center;">
+                        <span id="repo-category-label">全部分类</span>
+                        <span style="margin-left: 0.5rem;">▼</span>
+                    </button>
+                    <div id="repo-category-dropdown"
+                         style="display: none; position: absolute; top: 100%; left: 0; margin-top: 0.25rem; background: white; border: 1px solid var(--gray-200); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; min-width: 300px; max-height: 400px; overflow-y: auto;">
+                        <div style="padding: 0.5rem;">
+                            <button type="button" class="repo-cat-clear-btn"
+                                    style="width: 100%; padding: 0.5rem; border: 1px solid var(--gray-200); border-radius: 4px; background: white; cursor: pointer; text-align: left; margin-bottom: 0.5rem;">
+                                清除选择
+                            </button>
+                            <div id="repo-category-tree"></div>
+                        </div>
+                    </div>
+                </div>
+                <select id="repo-page-size"
+                        style="padding:0.5rem 0.75rem; border:1px solid var(--gray-200); border-radius:8px;">
+                    <option value="20">每页 20</option>
+                    <option value="50">每页 50</option>
+                    <option value="100">每页 100</option>
+                </select>
+                <button id="repo-search" class="btn">搜索</button>
+                <button id="repo-reset" class="btn btn-secondary">重置</button>
+                <button id="openAddRepository" class="btn btn-success">添加仓库</button>
+            </div>
+        </div>
+        <div id="repo-results" class="repositories-list">
+            <p class="loading">加载中...</p>
+        </div>
+        <div id="repo-pagination"
+             style="display:flex; justify-content: space-between; align-items:center; margin-top:1rem;">
+            <button id="repo-prev" class="btn btn-secondary">上一页</button>
+            <span id="repo-page-info" class="repo-count"></span>
+            <button id="repo-next" class="btn btn-secondary">下一页</button>
+        </div>
+    </div>
+    <div id="categoryTabContent" class="admin-section" style="display:none;">
+        <h3>分类管理（树形）</h3>
+        <div class="section-header">
+            <div style="display:flex; gap:0.75rem; flex-wrap: wrap; align-items: center;">
+                <input type="text" id="cat-q" placeholder="搜索分类名称"
+                       style="padding:0.5rem 0.75rem; border:1px solid var(--gray-200); border-radius:8px; min-width:200px;"/>
+                <button id="cat-search" class="btn">搜索</button>
+                <button id="cat-reset" class="btn btn-secondary">重置</button>
+                <button id="cat-expand-all" class="btn btn-secondary">全部展开</button>
+                <button id="cat-collapse-all" class="btn btn-secondary">全部收起</button>
+                <button id="openAddCategory" class="btn">添加分类</button>
+            </div>
+        </div>
+        <div id="cat-results" class="categories-tree-container">
+            <p class="loading">加载中...</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/admin_dashboard.js"></script>
+{% endblock %}

@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}{% if show_all %}所有仓库{% else %}仓库列表{% endif %} - GitHub 开源导航{% endblock %}
+
+{% block content %}
+<div class="container layout-with-sidebar">
+    <aside class="left-sidebar">
+        <h3>分类筛选</h3>
+        <div id="category-tree" data-selected-id="{{ selected_category or '' }}"></div>
+    </aside>
+    <div class="content-area">
+        <section class="repositories-section">
+            <div class="section-header">
+                <h2>{% if selected_category %}分类仓库{% else %}最新入库{% endif %}</h2>
+                <div class="header-actions">
+                    <span class="repo-count">共 {{ repositories|length }} 个仓库</span>
+                </div>
+            </div>
+            <div class="repositories-grid">
+                {% if repositories %}
+                {% for repository in repositories %}
+                <a href="{{ repository.github_url }}" target="_blank" class="repo-card-link">
+                    <div class="repository-card">
+<!--                            <h3>{{ repository.name }}</h3>-->
+                        {% if repository.description %}
+                        <p class="repo-description" title="{{ repository.description }}">{{ repository.description }}</p>
+                        {% else %}
+                        <p class="repo-description" style="min-height: 4.32rem;">&nbsp;</p>
+                        {% endif %}
+                        <div class="card-embed">
+                            <img src="{{ repository.card_url }}?image=1"
+                                 style="width: 100%; height: auto; object-fit: contain;" alt="GitHub 信息卡片">
+                        </div>
+                    </div>
+                </a>
+                {% endfor %}
+                {% else %}
+                <div class="empty-state">
+                    <p>暂无仓库</p>
+                </div>
+                {% endif %}
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Sidebar tree layout */
+    .layout-with-sidebar {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        gap: 1.5rem;
+    }
+
+    .left-sidebar {
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        padding: 1rem;
+        height: fit-content;
+        position: sticky;
+        top: 90px;
+    }
+
+    .left-sidebar h3 {
+        margin-bottom: 0.75rem;
+        color: var(--gray-800);
+        font-size: 1rem;
+    }
+
+    .category-tree {
+        list-style: none;
+        padding-left: 0.25rem;
+    }
+
+    .category-tree .tree-item {
+        margin: 0.25rem 0;
+    }
+
+    .tree-link {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        border-radius: 6px;
+        color: var(--gray-800);
+        text-decoration: none;
+    }
+
+    .tree-link:hover {
+        background: var(--gray-100);
+    }
+
+    .tree-link.active {
+        color: var(--primary);
+        font-weight: 600;
+    }
+
+    .category-subtree {
+        list-style: none;
+        padding-left: 1rem;
+    }
+
+    .repo-count {
+        color: var(--gray-500);
+        font-size: 0.85rem;
+    }
+
+    .content-area {
+        min-width: 0;
+    }
+
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+
+    .header-actions {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: var(--gray-500);
+        grid-column: 1 / -1;
+    }
+
+    .empty-state p {
+        font-size: 1.125rem;
+    }
+
+    /* Mobile responsive */
+    @media (max-width: 992px) {
+        .layout-with-sidebar {
+            grid-template-columns: 1fr;
+        }
+
+        .left-sidebar {
+            position: static;
+            margin-bottom: 1rem;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .left-sidebar {
+            padding: 0.875rem;
+        }
+
+        .left-sidebar h3 {
+            font-size: 0.95rem;
+        }
+
+        .tree-link {
+            font-size: 0.875rem;
+            padding: 0.2rem 0.4rem;
+        }
+
+        .section-header h2 {
+            font-size: 1.5rem;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .section-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+
+        .section-header h2 {
+            font-size: 1.25rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/category_tree.js"></script>
+{% endblock %}

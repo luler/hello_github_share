@@ -1,0 +1,16 @@
+services:
+  github-navigator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # 管理员账号配置（可选，不设置则使用默认值 admin/admin123）
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+    volumes:
+      # 持久化数据库文件
+      - .:/app
+

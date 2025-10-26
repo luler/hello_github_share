@@ -1,0 +1,651 @@
+from fastapi import FastAPI, Depends, HTTPException, Request, Form, Query, Cookie
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
+from typing import Optional, List
+import uvicorn
+import os
+
+from database import SessionLocal, engine, get_db
+from models import Base, Category, Repository, Admin, Config
+from auth import get_current_admin, create_access_token, authenticate_admin, ACCESS_TOKEN_EXPIRE_MINUTES, hash_password
+from pydantic import BaseModel
+from datetime import timedelta
+from llm_service import generate_repo_summary
+
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI(title="GitHub Project Navigator")
+
+def init_default_admin():
+    """初始化默认管理员账号"""
+    db = SessionLocal()
+    try:
+        # 检查是否已存在管理员
+        admin_count = db.query(Admin).count()
+        if admin_count == 0:
+            # 从环境变量读取管理员账号密码，没有则使用默认值
+            default_username = os.getenv("ADMIN_USERNAME", "admin")
+            default_password = os.getenv("ADMIN_PASSWORD", "admin123")
+
+            admin = Admin(
+                username=default_username,
+                password_hash=hash_password(default_password)
+            )
+            db.add(admin)
+            db.commit()
+            print(f"默认管理员账户已创建 - 用户名: {default_username}")
+    except Exception as e:
+        print(f"初始化默认管理员失败: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+# 启动时初始化默认管理员
+init_default_admin()
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
+
+class CategoryCreate(BaseModel):
+    name: str
+    parent_id: Optional[int] = None
+
+class CategoryResponse(BaseModel):
+    id: int
+    name: str
+    parent_id: Optional[int]
+    level: int
+    children: List['CategoryResponse'] = []
+
+class RepositoryCreate(BaseModel):
+    name: str
+    github_url: str
+    category_id: int
+    description: Optional[str] = None
+
+@app.post("/api/categories")
+async def create_category(category: CategoryCreate, current_admin: Admin = Depends(get_current_admin), db: Session = Depends(get_db)):
+    level = 0
+    if category.parent_id:
+        parent = db.query(Category).filter(Category.id == category.parent_id).first()
+        if not parent:
+            raise HTTPException(status_code=404, detail="父级分类不存在")
+        level = parent.level + 1
+
+        # 限制最多三级分类（level 0, 1, 2）
+        if level > 2:
+            raise HTTPException(status_code=400, detail="最多只能创建三级分类")
+
+    db_category = Category(
+        name=category.name,
+        parent_id=category.parent_id,
+        level=level
+    )
+    db.add(db_category)
+    db.commit()
+    db.refresh(db_category)
+    return {"id": db_category.id, "name": db_category.name, "parent_id": db_category.parent_id, "level": db_category.level}
+
+@app.get("/api/categories")
+async def get_categories(db: Session = Depends(get_db)):
+    categories = db.query(Category).all()
+    result = []
+
+    def build_category_tree(category):
+        repos = [{"name": repo.name} for repo in category.repositories]
+
+        children = [build_category_tree(child) for child in category.children]
+
+        return {
+            "id": category.id,
+            "name": category.name,
+            "repositories": repos,
+            "repo_count": len(category.repositories or []),
+            "child_count": len(category.children or []),
+            "children": children
+        }
+
+    for category in categories:
+        if category.parent_id is None:
+            result.append(build_category_tree(category))
+
+    return result
+
+@app.get("/api/categories/public")
+async def get_categories_public(db: Session = Depends(get_db)):
+    """首页分类筛选专用接口：只显示有仓库的分类，每个分类只统计自己的仓库数量"""
+    categories = db.query(Category).all()
+    result = []
+
+    def has_repositories_in_tree(category):
+        """检查分类或其子分类是否有仓库"""
+        if category.repositories and len(category.repositories) > 0:
+            return True
+        for child in category.children:
+            if has_repositories_in_tree(child):
+                return True
+        return False
+
+    def build_category_tree(category):
+        # 只统计当前分类自己的仓库数量，不包括子分类
+        repos = [{"name": repo.name} for repo in category.repositories]
+
+        # 递归构建子分类树，但只保留有仓库的子分类
+        children = []
+        for child in category.children:
+            # 只有当子分类有仓库时才包含（注意：这里检查的是子分类自己，不是树）
+            if child.repositories and len(child.repositories) > 0:
+                child_node = build_category_tree(child)
+                if child_node:
+                    children.append(child_node)
+            # 如果子分类没有仓库，但它的子孙分类有仓库，也要保留以维持树形结构
+            elif has_repositories_in_tree(child):
+                child_node = build_category_tree(child)
+                if child_node:
+                    children.append(child_node)
+
+        return {
+            "id": category.id,
+            "name": category.name,
+            "repositories": repos,
+            "repo_count": len(category.repositories or []),  # 只统计自己的仓库
+            "child_count": len(children),
+            "children": children
+        }
+
+    for category in categories:
+        if category.parent_id is None:
+            # 顶级分类：只有自己有仓库，或子孙分类有仓库时才包含
+            if has_repositories_in_tree(category):
+                tree = build_category_tree(category)
+                if tree:
+                    result.append(tree)
+
+    return result
+
+# 管理后台分类列表（分页与筛选）
+@app.get("/api/admin/categories")
+async def admin_list_categories(
+    request: Request,
+    db: Session = Depends(get_db),
+    q: Optional[str] = Query(None),
+    parent_id: Optional[int] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100)
+):
+    token = request.cookies.get("access_token")
+    try:
+        _ = get_current_admin(token, db)
+    except Exception:
+        raise HTTPException(status_code=401, detail="未授权")
+
+    query = db.query(Category)
+    if q:
+        query = query.filter(Category.name.ilike(f"%{q}%"))
+    if parent_id is not None:
+        query = query.filter(Category.parent_id == parent_id)
+
+    total = query.count()
+    items = query.order_by(Category.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+
+    def to_obj(cat: Category):
+        return {
+            "id": cat.id,
+            "name": cat.name,
+            "parent_id": cat.parent_id,
+            "level": cat.level,
+            "created_at": cat.created_at.isoformat() if cat.created_at else None,
+            "repo_count": len(cat.repositories or []),
+            "child_count": len(cat.children or [])
+        }
+
+    return {"items": [to_obj(c) for c in items], "total": total, "page": page, "page_size": page_size}
+
+@app.get("/api/categories/flat")
+async def get_categories_flat(db: Session = Depends(get_db)):
+    categories = db.query(Category).all()
+    return [{"id": cat.id, "name": cat.name, "parent_id": cat.parent_id, "level": cat.level} for cat in categories]
+
+@app.put("/api/categories/{category_id}")
+async def update_category(
+    category_id: int,
+    category_update: CategoryCreate,
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    # 查找要更新的分类
+    category = db.query(Category).filter(Category.id == category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="分类不存在")
+
+    # 检查新名称是否为空
+    if not category_update.name or not category_update.name.strip():
+        raise HTTPException(status_code=400, detail="分类名称不能为空")
+
+    # 如果要修改父级
+    if category_update.parent_id != category.parent_id:
+        # 检查是否选择了自己作为父级
+        if category_update.parent_id == category_id:
+            raise HTTPException(status_code=400, detail="不能选择自己作为父级")
+
+        # 检查是否选择了自己的子孙分类作为父级
+        def get_descendant_ids(parent_id):
+            descendants = []
+            children = db.query(Category).filter(Category.parent_id == parent_id).all()
+            for child in children:
+                descendants.append(child.id)
+                descendants.extend(get_descendant_ids(child.id))
+            return descendants
+
+        descendant_ids = get_descendant_ids(category_id)
+        if category_update.parent_id in descendant_ids:
+            raise HTTPException(status_code=400, detail="不能选择自己的子分类作为父级")
+
+        # 如果有新的父级，验证父级存在并计算新的level
+        if category_update.parent_id:
+            parent = db.query(Category).filter(Category.id == category_update.parent_id).first()
+            if not parent:
+                raise HTTPException(status_code=404, detail="父级分类不存在")
+            new_level = parent.level + 1
+
+            # 限制最多三级分类（level 0, 1, 2）
+            if new_level > 2:
+                raise HTTPException(status_code=400, detail="最多只能创建三级分类")
+
+            # 检查移动后子孙分类是否会超过三级
+            def check_descendants_max_depth(parent_id, current_depth=0):
+                """检查子孙分类的最大深度"""
+                children = db.query(Category).filter(Category.parent_id == parent_id).all()
+                if not children:
+                    return current_depth
+                max_depth = current_depth
+                for child in children:
+                    child_depth = check_descendants_max_depth(child.id, current_depth + 1)
+                    max_depth = max(max_depth, child_depth)
+                return max_depth
+
+            # 如果当前分类有子分类，检查移动后整体深度
+            max_descendant_depth = check_descendants_max_depth(category_id)
+            if new_level + max_descendant_depth > 2:
+                raise HTTPException(status_code=400, detail=f"移动后子分类将超过三级限制")
+        else:
+            new_level = 0
+
+        # 更新分类的level和parent_id
+        old_level = category.level
+        category.parent_id = category_update.parent_id
+        category.level = new_level
+
+        # 递归更新所有子孙分类的level
+        def update_descendants_level(parent_id, level_diff):
+            children = db.query(Category).filter(Category.parent_id == parent_id).all()
+            for child in children:
+                child.level += level_diff
+                update_descendants_level(child.id, level_diff)
+
+        level_diff = new_level - old_level
+        if level_diff != 0:
+            update_descendants_level(category_id, level_diff)
+
+    # 更新名称
+    category.name = category_update.name.strip()
+
+    db.commit()
+    db.refresh(category)
+
+    return {
+        "id": category.id,
+        "name": category.name,
+        "parent_id": category.parent_id,
+        "level": category.level
+    }
+
+@app.delete("/api/categories/{category_id}")
+async def delete_category(category_id: int, current_admin: Admin = Depends(get_current_admin), db: Session = Depends(get_db)):
+    category = db.query(Category).filter(Category.id == category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="分类不存在")
+
+    # 检查是否有子分类
+    if category.children:
+        raise HTTPException(status_code=400, detail="该分类下还有子分类，无法删除")
+
+    # 检查是否有仓库
+    if category.repositories:
+        raise HTTPException(status_code=400, detail="该分类下还有仓库，无法删除")
+
+    db.delete(category)
+    db.commit()
+    return {"message": "分类已删除"}
+
+def _is_admin_request(request: Request, db: Session) -> bool:
+    token = request.cookies.get("access_token")
+    if not token:
+        return False
+    try:
+        _ = get_current_admin(token, db)
+        return True
+    except HTTPException:
+        return False
+
+@app.get("/", response_class=HTMLResponse)
+async def home(request: Request, category_id: Optional[int] = Query(None), db: Session = Depends(get_db)):
+    # 首页显示仓库列表，默认按最新入库时间排序
+    categories = db.query(Category).filter(Category.parent_id.is_(None)).all()
+
+    query = db.query(Repository)
+    if category_id:
+        query = query.filter(Repository.category_id == category_id)
+
+    # 默认按最新入库时间排序
+    repositories = query.order_by(Repository.added_at.desc()).all()
+
+    return templates.TemplateResponse("repositories.html", {
+        "request": request,
+        "categories": categories,
+        "repositories": repositories,
+        "selected_category": category_id,
+        "show_all": False,
+        "is_admin": _is_admin_request(request, db)
+    })
+
+@app.post("/api/repositories")
+async def create_repository(repository: RepositoryCreate, current_admin: Admin = Depends(get_current_admin), db: Session = Depends(get_db)):
+    # 验证描述不能为空
+    if not repository.description or not repository.description.strip():
+        raise HTTPException(status_code=400, detail="项目描述不能为空")
+
+    # 解析GitHub URL获取owner和repo_name
+    try:
+        if "github.com" in repository.github_url:
+            parts = repository.github_url.strip("/").split("/")
+            if len(parts) >= 2:
+                owner = parts[-2]
+                repo_name = parts[-1]
+            else:
+                raise HTTPException(status_code=400, detail="无效的GitHub URL")
+        else:
+            raise HTTPException(status_code=400, detail="请提供有效的GitHub URL")
+    except Exception:
+        raise HTTPException(status_code=400, detail="无效的GitHub URL格式")
+
+    # 检查分类是否存在
+    category = db.query(Category).filter(Category.id == repository.category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="分类不存在")
+
+    # 检查URL是否已存在
+    existing_repo = db.query(Repository).filter(Repository.github_url == repository.github_url).first()
+    if existing_repo:
+        raise HTTPException(status_code=400, detail="该仓库已存在")
+
+    db_repository = Repository(
+        name=repository.name,
+        github_url=repository.github_url,
+        owner=owner,
+        repo_name=repo_name,
+        category_id=repository.category_id,
+        description=repository.description.strip()
+    )
+    db.add(db_repository)
+    db.commit()
+    db.refresh(db_repository)
+
+    return {"id": db_repository.id, "name": db_repository.name, "github_url": db_repository.github_url}
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_login_page(request: Request, db: Session = Depends(get_db)):
+    token = request.cookies.get("access_token")
+    if token:
+        try:
+            # 如果已有有效会话，直接进入后台
+            _ = get_current_admin(token, db)
+            return RedirectResponse(url="/admin/dashboard")
+        except HTTPException:
+            pass
+    return templates.TemplateResponse("admin_login.html", {"request": request})
+
+@app.post("/admin/login")
+async def admin_login(request: Request, username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+    admin = authenticate_admin(username, password, db)
+    if not admin:
+        return templates.TemplateResponse("admin_login.html", {
+            "request": request,
+            "error": "用户名或密码错误"
+        })
+
+    access_token = create_access_token(
+        data={"sub": admin.username},
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+
+    response = RedirectResponse(url="/admin/dashboard", status_code=303)
+    # 记住会话：设置持久化 Cookie，持续到令牌过期
+    max_age = ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        max_age=max_age,
+        samesite="lax",
+        path="/"
+    )
+    return response
+
+@app.get("/admin/dashboard", response_class=HTMLResponse)
+async def admin_dashboard(request: Request, db: Session = Depends(get_db)):
+    token = request.cookies.get("access_token")
+    if not token:
+        return RedirectResponse(url="/admin")
+
+    try:
+        current_admin = get_current_admin(token, db)
+    except HTTPException:
+        return RedirectResponse(url="/admin")
+
+    categories = db.query(Category).all()
+    repositories = db.query(Repository).order_by(Repository.added_at.desc()).limit(20).all()
+
+    return templates.TemplateResponse("admin_dashboard.html", {
+        "request": request,
+        "admin": current_admin,
+        "categories": categories,
+        "repositories": repositories
+    })
+
+@app.get("/admin/configs", response_class=HTMLResponse)
+async def admin_configs_page(request: Request, db: Session = Depends(get_db)):
+    """配置管理页面"""
+    token = request.cookies.get("access_token")
+    if not token:
+        return RedirectResponse(url="/admin")
+
+    try:
+        current_admin = get_current_admin(token, db)
+    except HTTPException:
+        return RedirectResponse(url="/admin")
+
+    configs = db.query(Config).all()
+    return templates.TemplateResponse("admin_configs.html", {
+        "request": request,
+        "admin": current_admin,
+        "configs": configs
+    })
+
+@app.get("/admin/logout")
+async def admin_logout():
+    response = RedirectResponse(url="/admin")
+    response.delete_cookie("access_token")
+    return response
+
+@app.get("/api/repositories")
+async def get_repositories(category_id: Optional[int] = Query(None), db: Session = Depends(get_db)):
+    query = db.query(Repository)
+    if category_id:
+        query = query.filter(Repository.category_id == category_id)
+    repositories = query.order_by(Repository.added_at.desc()).all()
+    return [{"id": repo.id, "name": repo.name, "owner": repo.owner, "repo_name": repo.repo_name,
+             "category_id": repo.category_id, "card_url": repo.card_url} for repo in repositories]
+
+@app.get("/api/repositories/search")
+async def search_repositories(q: str = Query(..., min_length=1), db: Session = Depends(get_db)):
+    """模糊搜索仓库 - 支持按名称、描述、owner搜索"""
+    search_term = f"%{q}%"
+    repositories = db.query(Repository).filter(
+        (Repository.name.ilike(search_term)) |
+        (Repository.owner.ilike(search_term)) |
+        (Repository.description.ilike(search_term))
+    ).order_by(Repository.added_at.desc()).limit(50).all()
+
+    return [{
+        "id": repo.id,
+        "name": repo.name,
+        "owner": repo.owner,
+        "repo_name": repo.repo_name,
+        "github_url": repo.github_url,
+        "category_id": repo.category_id,
+        "category_name": repo.category.name if repo.category else None,
+        "card_url": repo.card_url,
+        "description": repo.description
+    } for repo in repositories]
+
+@app.get("/api/repositories/latest")
+async def get_latest_repositories(db: Session = Depends(get_db)):
+    repositories = db.query(Repository).order_by(Repository.added_at.desc()).limit(10).all()
+    return [{"id": repo.id, "name": repo.name, "owner": repo.owner, "repo_name": repo.repo_name,
+             "card_url": repo.card_url} for repo in repositories]
+
+# 管理后台仓库列表（分页与筛选）
+@app.get("/api/admin/repositories")
+async def admin_list_repositories(
+    request: Request,
+    db: Session = Depends(get_db),
+    q: Optional[str] = Query(None),
+    category_id: Optional[int] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100)
+):
+    token = request.cookies.get("access_token")
+    try:
+        _ = get_current_admin(token, db)
+    except Exception:
+        raise HTTPException(status_code=401, detail="未授权")
+
+    query = db.query(Repository)
+    if category_id:
+        query = query.filter(Repository.category_id == category_id)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(
+            (Repository.name.ilike(like)) |
+            (Repository.owner.ilike(like)) |
+            (Repository.repo_name.ilike(like)) |
+            (Repository.description.ilike(like))
+        )
+
+    total = query.count()
+    items = query.order_by(Repository.added_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+
+    def to_obj(repo: Repository):
+        return {"id": repo.id, "name": repo.name, "owner": repo.owner, "repo_name": repo.repo_name,
+                "github_url": repo.github_url,
+                "category_id": repo.category_id, "category_name": repo.category.name if repo.category else None,
+                "card_url": repo.card_url, "description": repo.description}
+
+    return {"items": [to_obj(r) for r in items], "total": total, "page": page, "page_size": page_size}
+
+@app.put("/api/repositories/{repository_id}")
+async def update_repository(repository_id: int, repository: RepositoryCreate, current_admin: Admin = Depends(get_current_admin), db: Session = Depends(get_db)):
+    db_repository = db.query(Repository).filter(Repository.id == repository_id).first()
+    if not db_repository:
+        raise HTTPException(status_code=404, detail="仓库不存在")
+
+    # 验证描述不能为空
+    if not repository.description or not repository.description.strip():
+        raise HTTPException(status_code=400, detail="项目描述不能为空")
+
+    # 解析GitHub URL
+    try:
+        if "github.com" in repository.github_url:
+            parts = repository.github_url.strip("/").split("/")
+            if len(parts) >= 2:
+                owner = parts[-2]
+                repo_name = parts[-1]
+            else:
+                raise HTTPException(status_code=400, detail="无效的GitHub URL")
+        else:
+            raise HTTPException(status_code=400, detail="请提供有效的GitHub URL")
+    except Exception:
+        raise HTTPException(status_code=400, detail="无效的GitHub URL格式")
+
+    # 检查分类是否存在
+    category = db.query(Category).filter(Category.id == repository.category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="分类不存在")
+
+    db_repository.name = repository.name
+    db_repository.github_url = repository.github_url
+    db_repository.owner = owner
+    db_repository.repo_name = repo_name
+    db_repository.category_id = repository.category_id
+    db_repository.description = repository.description.strip()
+
+    db.commit()
+    return {"message": "仓库已更新"}
+
+@app.delete("/api/repositories/{repository_id}")
+async def delete_repository(repository_id: int, current_admin: Admin = Depends(get_current_admin), db: Session = Depends(get_db)):
+    repository = db.query(Repository).filter(Repository.id == repository_id).first()
+    if not repository:
+        raise HTTPException(status_code=404, detail="仓库不存在")
+
+    db.delete(repository)
+    db.commit()
+    return {"message": "仓库已删除"}
+
+# ========== 配置管理 API ==========
+@app.get("/api/admin/configs")
+async def get_configs(current_admin: Admin = Depends(get_current_admin), db: Session = Depends(get_db)):
+    """获取所有配置"""
+    configs = db.query(Config).all()
+    return [{"key": c.key, "value": c.value, "description": c.description} for c in configs]
+
+@app.put("/api/admin/configs")
+async def update_configs(
+    configs: dict,
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """批量更新配置"""
+    for key, value in configs.items():
+        config = db.query(Config).filter(Config.key == key).first()
+        if config:
+            config.value = value
+        else:
+            new_config = Config(key=key, value=value)
+            db.add(new_config)
+    db.commit()
+    return {"message": "配置已更新"}
+
+# ========== LLM 摘要 API ==========
+@app.post("/api/repositories/generate-summary")
+async def api_generate_summary(
+    data: dict,
+    current_admin: Admin = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """生成仓库摘要"""
+    github_url = data.get("github_url")
+    if not github_url:
+        raise HTTPException(status_code=400, detail="缺少 github_url 参数")
+
+    result = await generate_repo_summary(github_url, db)
+    if result["success"]:
+        return {"success": True, "summary": result["summary"]}
+    else:
+        return {"success": False, "error": result["error"]}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)

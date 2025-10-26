@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}GitHub 开源导航{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    {% block extra_css %}{% endblock %}
+</head>
+<body{% block body_class %}{% endblock %}>
+    <header>
+        <div class="header-content">
+            <h1>
+                <a href="/" style="display: flex; align-items: center; gap: 0.5rem; text-decoration: none; color: inherit;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="2">
+                        <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+                    </svg>
+                    <span>GitHub 开源导航</span>
+                </a>
+            </h1>
+            <nav>
+                {% block nav %}
+                <a href="/" {% if page == 'home' %}class="active"{% endif %}>项目列表</a>
+                {% if is_admin %}
+                <a href="/admin/dashboard" {% if page == 'admin_dashboard' %}class="active"{% endif %}>管理后台</a>
+                <a href="/admin/logout" class="logout-link">退出</a>
+                {% else %}
+                <a href="/admin" {% if page == 'admin_login' %}class="active"{% endif %}>管理登录</a>
+                {% endif %}
+                {% endblock %}
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+        <p>&copy; 2024 GitHub 开源导航</p>
+    </footer>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
