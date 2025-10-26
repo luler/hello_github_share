@@ -1,8 +1,6 @@
 services:
   github-navigator:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/luler/hello_github_share:latest
     restart: unless-stopped
     ports:
       - "8000:8000"
