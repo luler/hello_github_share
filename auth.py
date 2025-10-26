@@ -1,28 +1,32 @@
-from fastapi import Depends, HTTPException, status, Form, Cookie
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from fastapi.responses import RedirectResponse
-from sqlalchemy.orm import Session
-from jose import JWTError, jwt
+import hashlib
+import os
 from datetime import datetime, timedelta
 from typing import Optional
-import hashlib
+
+from fastapi import Depends, HTTPException, status, Cookie
+from fastapi.security import HTTPBasic
+from jose import JWTError, jwt
+from sqlalchemy.orm import Session
 
 from database import get_db
 from models import Admin
 
 security = HTTPBasic()
 
-SECRET_KEY = "your-secret-key-change-in-production"
+SECRET_KEY = os.getenv("JWT_SECRET", "vdidDXhbSN")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24小时会话过期时间
+
 
 def hash_password(password: str) -> str:
     """使用SHA256哈希密码"""
     return hashlib.sha256(password.encode()).hexdigest()
 
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """验证密码"""
     return hash_password(plain_password) == hashed_password
+
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
@@ -33,6 +37,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
 
 def verify_token(token: str):
     try:
@@ -52,6 +57,7 @@ def verify_token(token: str):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+
 def get_current_admin(token: Optional[str] = Cookie(None, alias="access_token"), db: Session = Depends(get_db)):
     if not token:
         raise HTTPException(
@@ -68,6 +74,7 @@ def get_current_admin(token: Optional[str] = Cookie(None, alias="access_token"),
             detail="管理员不存在"
         )
     return admin
+
 
 def authenticate_admin(username: str, password: str, db: Session):
     admin = db.query(Admin).filter(Admin.username == username).first()
