@@ -1,7 +1,7 @@
 /**
  * 仓库管理器 - 统一处理搜索和无限滚动加载
  */
-(function() {
+(function () {
     'use strict';
 
     // ==================== 状态管理 ====================
@@ -19,15 +19,25 @@
     function init() {
         console.log('Repository Manager initialized');
 
-        // 获取URL参数中的分类ID
+        // 获取URL参数
         const urlParams = new URLSearchParams(window.location.search);
         currentCategoryId = urlParams.get('category_id');
+        const searchQuery = urlParams.get('q');
 
         // 初始化搜索功能
         initSearch();
 
-        // 初始化无限滚动
-        initInfiniteScroll();
+        // 如果URL中有搜索参数，自动执行搜索
+        if (searchQuery) {
+            const searchInput = document.getElementById('repo-search-input');
+            if (searchInput) {
+                searchInput.value = searchQuery;
+                performSearch(searchQuery);
+            }
+        } else {
+            // 初始化无限滚动
+            initInfiniteScroll();
+        }
     }
 
     // ==================== 搜索功能 ====================
@@ -41,7 +51,7 @@
         console.log('Search functionality initialized');
 
         // 监听回车键
-        searchInput.addEventListener('keypress', async function(e) {
+        searchInput.addEventListener('keypress', async function (e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 const query = searchInput.value.trim();
@@ -50,16 +60,33 @@
         });
     }
 
+    /**
+     * 更新URL参数，不刷新页面
+     */
+    function updateUrlParams(query) {
+        const url = new URL(window.location);
+        if (query) {
+            url.searchParams.set('q', query);
+        } else {
+            url.searchParams.delete('q');
+        }
+        window.history.pushState({}, '', url);
+    }
+
     async function performSearch(query) {
         if (!query) {
             // 清空搜索，恢复无限滚动
             currentSearchQuery = null;
+            updateUrlParams(null); // 清空URL参数
             resetAndReload();
             return;
         }
 
         console.log('Performing search for:', query);
         currentSearchQuery = query;
+
+        // 更新URL参数（支持分享）
+        updateUrlParams(query);
 
         // 禁用无限滚动
         disableInfiniteScroll();
@@ -111,7 +138,7 @@
         window.addEventListener('scroll', handleScroll);
 
         // 监听分类切换
-        document.addEventListener('categoryChanged', function(e) {
+        document.addEventListener('categoryChanged', function (e) {
             console.log('Category changed to:', e.detail.categoryId);
             resetAndReload(e.detail.categoryId);
         });

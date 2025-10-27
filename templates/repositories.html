@@ -7,7 +7,7 @@
     <aside class="left-sidebar">
         <h3>仓库搜索</h3>
         <div class="search-box">
-            <input type="text" id="repo-search-input" placeholder="搜索仓库..." />
+            <input type="text" id="repo-search-input" placeholder="搜索仓库..."/>
         </div>
         <h3>分类筛选</h3>
         <div id="category-tree" data-selected-id="{{ selected_category or '' }}"></div>
@@ -156,9 +156,15 @@
     }
 
     @keyframes loading-dots {
-        0%, 20% { content: "."; }
-        40% { content: ".."; }
-        60%, 100% { content: "..."; }
+        0%, 20% {
+            content: ".";
+        }
+        40% {
+            content: "..";
+        }
+        60%, 100% {
+            content: "...";
+        }
     }
 
     .no-more-indicator {
@@ -220,5 +226,5 @@
 
 {% block extra_js %}
 <script src="/static/js/category_tree.js?v=1"></script>
-<script src="/static/js/repository_manager.js?v=1"></script>
+<script src="/static/js/repository_manager.js?v=2"></script>
 {% endblock %}
