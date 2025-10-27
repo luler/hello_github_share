@@ -370,14 +370,15 @@ async def list_repositories(
     """
     query = db.query(Repository)
 
-    # 搜索筛选
+    # 搜索筛选（支持模糊搜索仓库信息和分类名称）
     if q and q.strip():
         like = f"%{q.strip()}%"
         query = query.filter(
             (Repository.name.ilike(like)) |
             (Repository.owner.ilike(like)) |
             (Repository.repo_name.ilike(like)) |
-            (Repository.description.ilike(like))
+            (Repository.description.ilike(like)) |
+            (Repository.category.has(Category.name.ilike(like)))
         )
 
     # 分类筛选
@@ -565,7 +566,8 @@ async def admin_list_repositories(
             (Repository.name.ilike(like)) |
             (Repository.owner.ilike(like)) |
             (Repository.repo_name.ilike(like)) |
-            (Repository.description.ilike(like))
+            (Repository.description.ilike(like)) |
+            (Repository.category.has(Category.name.ilike(like)))
         )
 
     total = query.count()
