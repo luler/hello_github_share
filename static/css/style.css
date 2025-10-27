@@ -464,11 +464,11 @@ main {
     line-height: 1.6;
     margin-bottom: 0.75rem;
     display: -webkit-box;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 5;
     -webkit-box-orient: vertical;
     overflow: hidden;
     text-overflow: ellipsis;
-    min-height: 4.32rem; /* 3行高度: 0.9rem * 1.6 * 3 = 4.32rem */
+    min-height: 7.2rem; /* 4行高度: 0.9rem * 1.6 * 5 = 7.2rem */
     cursor: help;
 }
 
