@@ -3,7 +3,7 @@ LLM 服务模块：使用 OpenAI API 生成仓库摘要
 """
 from typing import Optional
 
-import requests
+import httpx
 from sqlalchemy.orm import Session
 
 from models import Config
@@ -26,12 +26,13 @@ async def fetch_repo_content_with_jina(github_url: str, jina_api_key: str) -> Op
     try:
         # Jina Reader API
         jina_url = f"https://r.jina.ai/{github_url}"
-        response = requests.get(jina_url, headers=headers, timeout=30)
-        if response.status_code == 200:
-            return response.text
-        else:
-            print(f"Jina API 错误: {response.status_code} - {response.text}")
-            return None
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(jina_url, headers=headers)
+            if response.status_code == 200:
+                return response.text
+            else:
+                print(f"Jina API 错误: {response.status_code} - {response.text}")
+                return None
     except Exception as e:
         print(f"Jina API 请求失败: {e}")
         return None
@@ -63,20 +64,20 @@ async def generate_summary_with_llm(
             "max_tokens": 500
         }
 
-        response = requests.post(
-            f"{base_url.rstrip('/')}/chat/completions",
-            headers=headers,
-            json=data,
-            timeout=60
-        )
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{base_url.rstrip('/')}/chat/completions",
+                headers=headers,
+                json=data
+            )
 
-        if response.status_code == 200:
-            result = response.json()
-            summary = result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-            return summary
-        else:
-            print(f"OpenAI API 错误: {response.status_code} - {response.text}")
-            return None
+            if response.status_code == 200:
+                result = response.json()
+                summary = result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+                return summary
+            else:
+                print(f"OpenAI API 错误: {response.status_code} - {response.text}")
+                return None
     except Exception as e:
         print(f"LLM API 请求失败: {e}")
         return None

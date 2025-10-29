@@ -4,7 +4,7 @@ from typing import Optional, List
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, HTTPException, Request, Form, Query
+from fastapi import FastAPI, Depends, HTTPException, Request, Form, Query, BackgroundTasks
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -15,6 +15,41 @@ from auth import get_current_admin, create_access_token, authenticate_admin, ACC
 from database import SessionLocal, engine, get_db
 from llm_service import generate_repo_summary
 from models import Base, Category, Repository, Admin, Config
+
+
+# 全局变量：记录正在进行LLM摘要处理的仓库ID集合
+processing_repositories = set()
+
+
+# 后台任务：异步更新仓库LLM摘要
+async def update_repository_llm_summary(repository_id: int, github_url: str):
+    """
+    后台任务：使用LLM生成摘要并更新仓库描述
+    """
+    # 标记开始处理
+    processing_repositories.add(repository_id)
+
+    db = SessionLocal()
+    try:
+        # 生成LLM摘要
+        result = await generate_repo_summary(github_url, db)
+
+        if result.get("success"):
+            # 更新仓库描述
+            repo = db.query(Repository).filter(Repository.id == repository_id).first()
+            if repo:
+                repo.description = result.get("summary", github_url)
+                db.commit()
+                print(f"成功为仓库 {repository_id} 更新LLM摘要")
+        else:
+            # LLM生成失败，保持原有描述（GitHub URL）
+            print(f"仓库 {repository_id} LLM摘要生成失败: {result.get('error')}")
+    except Exception as e:
+        print(f"后台任务更新仓库 {repository_id} 摘要时出错: {e}")
+    finally:
+        # 标记处理完成
+        processing_repositories.discard(repository_id)
+        db.close()
 
 
 # 仓库对象转换公共函数
@@ -29,7 +64,8 @@ def repository_to_dict(repo: Repository) -> dict:
         "category_id": repo.category_id,
         "category_name": repo.category.name if repo.category else None,
         "card_url": repo.card_url,
-        "description": repo.description
+        "description": repo.description,
+        "is_processing": repo.id in processing_repositories
     }
 
 
@@ -91,6 +127,7 @@ class RepositoryCreate(BaseModel):
     github_url: str
     category_id: int
     description: Optional[str] = None
+    auto_llm_summary: Optional[bool] = False
 
 
 @app.post("/api/categories")
@@ -405,11 +442,21 @@ async def list_repositories(
 
 
 @app.post("/api/repositories")
-async def create_repository(repository: RepositoryCreate, current_admin: Admin = Depends(get_current_admin),
-                            db: Session = Depends(get_db)):
-    # 验证描述不能为空
-    if not repository.description or not repository.description.strip():
-        raise HTTPException(status_code=400, detail="项目描述不能为空")
+async def create_repository(
+        repository: RepositoryCreate,
+        background_tasks: BackgroundTasks,
+        current_admin: Admin = Depends(get_current_admin),
+        db: Session = Depends(get_db)
+):
+    # 根据auto_llm_summary字段决定是否必填描述
+    if not repository.auto_llm_summary:
+        # 不使用自动LLM摘要时，描述必填
+        if not repository.description or not repository.description.strip():
+            raise HTTPException(status_code=400, detail="项目描述不能为空")
+    else:
+        # 使用自动LLM摘要时，描述默认为GitHub URL
+        if not repository.description or not repository.description.strip():
+            repository.description = repository.github_url
 
     # 解析GitHub URL获取owner和repo_name
     try:
@@ -446,6 +493,14 @@ async def create_repository(repository: RepositoryCreate, current_admin: Admin =
     db.add(db_repository)
     db.commit()
     db.refresh(db_repository)
+
+    # 如果启用了自动LLM摘要，添加后台任务
+    if repository.auto_llm_summary:
+        background_tasks.add_task(
+            update_repository_llm_summary,
+            db_repository.id,
+            repository.github_url
+        )
 
     return {"id": db_repository.id, "name": db_repository.name, "github_url": db_repository.github_url}
 
