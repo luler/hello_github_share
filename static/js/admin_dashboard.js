@@ -694,8 +694,8 @@ document.addEventListener('DOMContentLoaded', () => {
         <tr>
           <th style="width: 60px;">ID</th>
           <th style="width: 180px;">仓库名称</th>
-          <th style="width: 250px;">GitHub URL</th>
-          <th style="width: 280px;">项目描述</th>
+          <th style="width: 320px;">信息卡片</th>
+          <th style="width: 300px;">项目描述</th>
           <th style="width: 100px;">分类</th>
           <th style="width: 200px; text-align: right;">操作</th>
         </tr>
@@ -707,10 +707,18 @@ document.addEventListener('DOMContentLoaded', () => {
     data.items.forEach(r => {
       const tr = document.createElement('tr');
       const descriptionText = r.description ? escapeHtml(r.description) : '<span style="color: var(--gray-400);">暂无描述</span>';
+
+      // Card URL显示为图片（参考首页实现，不添加点击跳转）
+      cardUrlContent = `
+          <div style="width: 100%;">
+            <img src="${escapeHtml(r.card_url)}?image=1" alt="GitHub 信息卡片" style="width: 100%; max-width: 300px; height: auto; object-fit: contain; border: 1px solid var(--gray-200); border-radius: 4px;"/>
+          </div>
+        `;
+
       tr.innerHTML = `
         <td class="col-id">${r.id}</td>
-        <td class="col-name">${escapeHtml(r.name)}</td>
-        <td class="col-url"><a href="${escapeHtml(r.github_url)}" target="_blank">${escapeHtml(r.github_url)}</a></td>
+        <td class="col-name"><a href="${escapeHtml(r.github_url)}" target="_blank" style="color: var(--primary); text-decoration: none;">${escapeHtml(r.name)}</a></td>
+        <td class="col-card-url">${cardUrlContent}</td>
         <td class="col-description">${descriptionText}</td>
         <td><span class="col-category">${escapeHtml(r.category_name || '-')}</span></td>
         <td class="col-actions">
