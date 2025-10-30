@@ -3,45 +3,72 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- SEO Meta Tags -->
     <title>{% block title %}GitHub 开源导航{% endblock %}</title>
+    <meta name="description"
+          content="{% block meta_description %}精选GitHub开源项目导航，按分类整理优质开源代码库，帮助开发者快速找到合适的开源项目{% endblock %}">
+    <meta name="keywords"
+          content="{% block meta_keywords %}GitHub,开源,代码库,项目导航,开源项目,编程,开发{% endblock %}">
+    <meta name="author" content="GitHub 开源导航">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="{% block og_title %}GitHub 开源导航{% endblock %}">
+    <meta property="og:description"
+          content="{% block og_description %}精选GitHub开源项目导航，按分类整理优质开源代码库{% endblock %}">
+    <meta property="og:url" content="{{ request.url }}">
+    <meta property="og:site_name" content="GitHub 开源导航">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:title" content="{% block twitter_title %}GitHub 开源导航{% endblock %}">
+    <meta property="twitter:description"
+          content="{% block twitter_description %}精选GitHub开源项目导航，按分类整理优质开源代码库{% endblock %}">
+
+    <!-- Canonical URL -->
+    <link rel="canonical" href="{{ request.url }}">
+
+    <!-- Favicon -->
     <link rel="stylesheet" href="/static/css/style.css?v2">
     <link rel="icon" type="image/png" href="/static/favicon.png">
+
     {% block extra_css %}{% endblock %}
 </head>
-<body{% block body_class %}{% endblock %}>
-    <header>
-        <div class="header-content">
-            <h1>
-                <a href="/" style="display: flex; align-items: center; gap: 0.5rem; text-decoration: none; color: inherit;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
-                         stroke="currentColor" stroke-width="2">
-                        <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
-                    </svg>
-                    <span>GitHub 开源导航</span>
-                </a>
-            </h1>
-            <nav>
-                {% block nav %}
-                <a href="/" {% if page == 'home' %}class="active"{% endif %}>项目列表</a>
-                {% if is_admin %}
-                <a href="/admin/dashboard" {% if page == 'admin_dashboard' %}class="active"{% endif %}>管理后台</a>
-                <a href="/admin/logout" class="logout-link">退出</a>
-                {% else %}
-                <a href="/admin" {% if page == 'admin_login' %}class="active"{% endif %}>管理登录</a>
-                {% endif %}
-                {% endblock %}
-            </nav>
-        </div>
-    </header>
+<body>
+<header>
+    <div class="header-content">
+        <h1>
+            <a href="/" style="display: flex; align-items: center; gap: 0.5rem; text-decoration: none; color: inherit;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2">
+                    <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+                </svg>
+                <span>GitHub 开源导航</span>
+            </a>
+        </h1>
+        <nav>
+            {% block nav %}
+            <a href="/" {% if page== 'home' %}class="active"{% endif %}>项目列表</a>
+            {% if is_admin %}
+            <a href="/admin/dashboard" {% if page== 'admin_dashboard' %}class="active"{% endif %}>管理后台</a>
+            <a href="/admin/logout" class="logout-link">退出</a>
+            {% else %}
+            <a href="/admin" {% if page== 'admin_login' %}class="active"{% endif %}>管理登录</a>
+            {% endif %}
+            {% endblock %}
+        </nav>
+    </div>
+</header>
 
-    <main>
-        {% block content %}{% endblock %}
-    </main>
+<main>
+    {% block content %}{% endblock %}
+</main>
 
-    <footer>
-        <p>&copy; 2024 GitHub 开源导航</p>
-    </footer>
+<footer>
+    <p>&copy; 2024 GitHub 开源导航</p>
+</footer>
 
-    {% block extra_js %}{% endblock %}
+{% block extra_js %}{% endblock %}
 </body>
 </html>

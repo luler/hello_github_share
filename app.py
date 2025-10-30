@@ -372,12 +372,19 @@ async def home(request: Request, category_id: Optional[int] = Query(None), db: S
     # 首页显示仓库列表，使用前端无限滚动加载，这里只返回空的初始页面
     categories = db.query(Category).filter(Category.parent_id.is_(None)).all()
 
+    # 获取选中的分类名称，用于SEO title优化
+    category_name = None
+    if category_id:
+        category = db.query(Category).filter(Category.id == category_id).first()
+        if category:
+            category_name = category.name
+
     return templates.TemplateResponse("repositories.html", {
         "request": request,
         "categories": categories,
         "repositories": [],  # 初始为空，由前端AJAX加载
         "selected_category": category_id,
-        "show_all": False,
+        "category_name": category_name,
         "is_admin": _is_admin_request(request, db)
     })
 

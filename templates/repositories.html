@@ -1,6 +1,44 @@
 {% extends "base.html" %}
 
-{% block title %}{% if show_all %}所有仓库{% else %}仓库列表{% endif %} - GitHub 开源导航{% endblock %}
+{% block title %}
+{% if category_name %}
+{{ category_name }} - GitHub 开源导航
+{% else %}
+仓库列表 - GitHub 开源导航
+{% endif %}
+{% endblock %}
+
+{% block meta_description %}
+{% if category_name %}
+精选{{ category_name }}分类下优质GitHub开源项目，包含{{ category_name }}相关的代码库和工具，助您快速找到合适的开源项目
+{% else %}
+精选GitHub开源项目导航，按分类整理优质开源代码库，帮助开发者快速找到合适的开源项目
+{% endif %}
+{% endblock %}
+
+{% block meta_keywords %}
+{% if category_name %}
+{{ category_name }},GitHub,开源,代码库,项目导航,开源项目
+{% else %}
+GitHub,开源,代码库,项目导航,开源项目,编程,开发
+{% endif %}
+{% endblock %}
+
+{% block og_title %}
+{% if category_name %}
+{{ category_name }} - GitHub 开源导航
+{% else %}
+GitHub 开源导航
+{% endif %}
+{% endblock %}
+
+{% block og_description %}
+{% if category_name %}
+发现{{ category_name }}分类下的优质GitHub开源项目
+{% else %}
+精选GitHub开源项目导航，按分类整理优质开源代码库
+{% endif %}
+{% endblock %}
 
 {% block content %}
 <div class="container layout-with-sidebar">
