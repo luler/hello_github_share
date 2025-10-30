@@ -66,8 +66,10 @@
         border-radius: 8px;
         padding: 1rem;
         background: var(--gray-50);
-        max-height: 600px;
-        overflow-y: auto;
+        /* 让容器自动扩展高度，不使用内部滚动条 */
+        max-height: none !important;
+        overflow-y: visible !important;
+        overflow: visible !important;
     }
 
     .admin-category-tree {
