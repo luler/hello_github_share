@@ -1,3 +1,5 @@
+console.log("category_tree.js 已加载");
+
 document.addEventListener('DOMContentLoaded', () => {
   const autoEl = document.getElementById('category-tree');
   if (autoEl) {
@@ -30,23 +32,18 @@ async function initCategoryTree(containerId, selectedCategoryId = null) {
       const node = buildTreeNode(cat, 1, selectedCategoryId, expandedSet);
       if (node) treeRoot.appendChild(node);
     });
-
-    container.innerHTML = '';
-    // Optional: search bar
-    const search = document.createElement('div');
-    search.className = 'tree-search';
-    search.innerHTML = '<input type="text" id="category-tree-search" placeholder="搜索分类...">';
-    container.appendChild(search);
+    container.innerHTML = "";
     container.appendChild(treeRoot);
-
-    const searchInput = document.getElementById('category-tree-search');
+    // 绑定分类搜索框事件
+    const searchInput = document.getElementById("category-search-input");
     if (searchInput) {
       let t;
-      searchInput.addEventListener('input', e => {
+      searchInput.addEventListener("input", e => {
         clearTimeout(t);
         t = setTimeout(() => filterTree(treeRoot, e.target.value.trim().toLowerCase(), expandedSet), 150);
       });
     }
+
   } catch (err) {
     console.error('加载分类树失败:', err);
     const container = document.getElementById(containerId);
@@ -88,6 +85,13 @@ function buildTreeNode(category, depth, selectedCategoryId, expandedSet) {
   link.className = 'tree-link';
   link.textContent = `${category.name}`;
   link.href = `/?category_id=${category.id}`;
+  link.dataset.categoryId = category.id;
+
+  // 添加点击事件处理，实现SPA行为
+  link.addEventListener("click", (e) => {
+    e.preventDefault();
+    handleCategoryClick(category.id, category.name);
+  });
   if (selectedCategoryId && category.id === selectedCategoryId) {
     link.classList.add('active');
   }
@@ -237,3 +241,84 @@ function countCategoryRepositories(category) {
 function getChevronSvg() {
   return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition: transform .16s ease;"><polyline points="9 18 15 12 9 6"></polyline></svg>';
 }
+
+/**
+ * 处理分类点击事件 - 实现SPA行为
+ * 点击分类时清空搜索参数
+ */
+function handleCategoryClick(categoryId, categoryName) {
+  console.log('分类点击:', categoryId, categoryName);
+
+  // 清空搜索输入框
+  const searchInput = document.getElementById('repo-search-input');
+  if (searchInput) {
+    searchInput.value = '';
+  }
+
+  // 更新URL（不刷新页面），清除q参数，只保留category_id
+  const url = new URL(window.location.href);
+  url.searchParams.set('category_id', categoryId);
+  url.searchParams.delete('q');  // 清除搜索参数
+  window.history.pushState({ categoryId, query: null }, '', url);
+
+  // 调用RepositoryManager重新加载数据（只传递分类ID，不传递搜索查询）
+  if (window.RepositoryManager && typeof window.RepositoryManager.reset === 'function') {
+    console.log('调用RepositoryManager重新加载数据, categoryId:', categoryId, 'query: null');
+    window.RepositoryManager.reset(categoryId, null);
+  } else {
+    console.error('RepositoryManager未找到或reset方法不可用');
+  }
+
+  // 更新分类树的选中状态
+  updateCategoryHighlight(categoryId);
+}
+
+/**
+ * 更新分类树的选中高亮状态
+ */
+function updateCategoryHighlight(selectedId) {
+  const allLinks = document.querySelectorAll('#category-tree .tree-link');
+  allLinks.forEach(link => {
+    const id = parseInt(link.dataset.categoryId, 10);
+    if (id === selectedId) {
+      link.classList.add('active');
+    } else {
+      link.classList.remove('active');
+    }
+  });
+}
+
+/**
+n// 暴露到全局作用域，供其他脚本调用
+window.updateCategoryHighlight = updateCategoryHighlight;
+ * 处理浏览器前进/后退事件
+ * 从URL读取参数并加载对应数据
+ */
+window.addEventListener('popstate', (e) => {
+  console.log('浏览器历史记录变更:', e.state);
+
+  // 从当前URL获取参数
+  const url = new URL(window.location.href);
+  const categoryId = url.searchParams.get('category_id');
+  const query = url.searchParams.get('q');
+
+  // 同步搜索输入框的值
+  const searchInput = document.getElementById('repo-search-input');
+  if (searchInput) {
+    searchInput.value = query || '';
+  }
+
+  if (categoryId) {
+    // 重新加载对应分类的数据
+    if (window.RepositoryManager && typeof window.RepositoryManager.reset === 'function') {
+      window.RepositoryManager.reset(categoryId, query);
+    }
+    updateCategoryHighlight(categoryId);
+  } else {
+    // 回到所有仓库
+    if (window.RepositoryManager && typeof window.RepositoryManager.reset === 'function') {
+      window.RepositoryManager.reset(null, query);
+    }
+    updateCategoryHighlight(null);
+  }
+});

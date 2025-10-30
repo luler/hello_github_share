@@ -5,11 +5,16 @@
 {% block content %}
 <div class="container layout-with-sidebar">
     <aside class="left-sidebar">
-        <h3>仓库搜索</h3>
-        <div class="search-box">
-            <input type="text" id="repo-search-input" placeholder="搜索仓库..."/>
+        <div class="sidebar-search-section">
+            <h3>仓库搜索</h3>
+            <div class="search-box">
+                <input type="text" id="repo-search-input" placeholder="搜索仓库..."/>
+            </div>
+            <h3>分类筛选</h3>
+            <div class="category-search-box">
+                <input type="text" id="category-search-input" placeholder="搜索分类..."/>
+            </div>
         </div>
-        <h3>分类筛选</h3>
         <div id="category-tree" data-selected-id="{{ selected_category or '' }}"></div>
     </aside>
     <div class="content-area">
@@ -41,10 +46,43 @@
         background: white;
         border-radius: 10px;
         box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-        padding: 1rem;
-        height: fit-content;
+        height: calc(100vh - 120px);
+        max-height: calc(100vh - 120px);
+        display: flex;
+        flex-direction: column;
         position: sticky;
         top: 90px;
+    }
+
+    .sidebar-search-section {
+        padding: 1rem;
+        border-bottom: 1px solid var(--gray-200);
+        flex-shrink: 0;
+    }
+
+    .sidebar-search-section h3 {
+        margin-bottom: 0.75rem;
+        color: var(--gray-800);
+        font-size: 1rem;
+    }
+
+    .category-search-box {
+        margin-bottom: 0.5rem;
+    }
+
+    #category-search-input {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--gray-300);
+        border-radius: 6px;
+        font-size: 0.875rem;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    #category-search-input:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
     }
 
     .left-sidebar h3 {
@@ -72,9 +110,40 @@
         box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
     }
 
+    #category-tree {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 0.5rem 0;
+    }
+
+    /* 自定义滚动条样式 - 更细的滚动条 */
+    #category-tree::-webkit-scrollbar {
+        width: 3px;
+    }
+
+    #category-tree::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    #category-tree::-webkit-scrollbar-thumb {
+        background: var(--gray-300);
+        border-radius: 1.5px;
+    }
+
+    #category-tree::-webkit-scrollbar-thumb:hover {
+        background: var(--gray-400);
+    }
+
+    /* 滚动条紧贴右边框 */
+    #category-tree {
+        padding-right: 0.25rem;
+    }
+
     .category-tree {
         list-style: none;
-        padding-left: 0.25rem;
+        padding-left: 0.75rem;
+        padding-right: 0.5rem;
     }
 
     .category-tree .tree-item {
@@ -179,7 +248,6 @@
         border-radius: 6px;
     }
 
-    /* Mobile responsive */
     @media (max-width: 992px) {
         .layout-with-sidebar {
             grid-template-columns: 1fr;
@@ -188,8 +256,22 @@
         .left-sidebar {
             position: static;
             margin-bottom: 1rem;
+            height: auto;
+            max-height: none;
+            flex-direction: column;
+        }
+
+        .sidebar-search-section {
+            padding: 0.875rem;
+        }
+
+        #category-tree {
+            max-height: none;
+            overflow-y: visible;
+            padding: 0.5rem 0;
         }
     }
+
 
     @media (max-width: 768px) {
         .left-sidebar {
@@ -225,6 +307,6 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/category_tree.js?v=1"></script>
-<script src="/static/js/repository_manager.js?v=2"></script>
+<script src="/static/js/category_tree.js?v=11"></script>
+<script src="/static/js/repository_manager.js?v=8"></script>
 {% endblock %}

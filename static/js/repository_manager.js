@@ -32,7 +32,13 @@
             const searchInput = document.getElementById('repo-search-input');
             if (searchInput) {
                 searchInput.value = searchQuery;
-                performSearch(searchQuery);
+                // 如果同时有分类参数，使用resetAndReload；否则使用performSearch
+                if (currentCategoryId) {
+                    console.log('初始化加载：分类 + 搜索', currentCategoryId, searchQuery);
+                    resetAndReload(parseInt(currentCategoryId, 10), searchQuery);
+                } else {
+                    performSearch(searchQuery);
+                }
             }
         } else {
             // 初始化无限滚动
@@ -62,14 +68,18 @@
 
     /**
      * 更新URL参数，不刷新页面
+     * 搜索时删除category_id参数，保留q参数
      */
     function updateUrlParams(query) {
         const url = new URL(window.location);
+
         if (query) {
             url.searchParams.set('q', query);
+            url.searchParams.delete('category_id');  // 搜索时清除分类
         } else {
             url.searchParams.delete('q');
         }
+
         window.history.pushState({}, '', url);
     }
 
@@ -83,9 +93,13 @@
         }
 
         console.log('Performing search for:', query);
+
+        // 搜索时清除分类选择
+        const previousCategoryId = currentCategoryId;
+        currentCategoryId = null;
         currentSearchQuery = query;
 
-        // 更新URL参数（支持分享）
+        // 更新URL参数（支持分享）- 清除category_id
         updateUrlParams(query);
 
         // 禁用无限滚动
@@ -98,7 +112,9 @@
         try {
             showLoadingIndicator();
 
-            const response = await fetch(`/api/repositories?q=${encodeURIComponent(query)}`);
+            // 使用 buildApiUrl 构建URL，确保包含搜索参数但不含分类
+            const url = buildApiUrl(1);
+            const response = await fetch(url);
             if (!response.ok) {
                 throw new Error('搜索请求失败');
             }
@@ -117,6 +133,11 @@
                 appendRepositories(data.items);
             } else {
                 showEmptyState('未找到相关仓库');
+            }
+
+            // 更新分类树的高亮状态
+            if (window.updateCategoryHighlight) {
+                window.updateCategoryHighlight(null);
             }
 
         } catch (error) {
@@ -161,7 +182,13 @@
     }
 
     async function loadNextPage() {
-        if (isLoading || !hasMore || currentSearchQuery) return;
+        // 如果正在加载或没有更多数据，则直接返回
+        if (isLoading || !hasMore) return;
+
+        // 如果有搜索查询，禁用无限滚动，但仍然可以加载第一页
+        if (currentSearchQuery && currentPage > 0) {
+            return;
+        }
 
         isLoading = true;
         showLoadingIndicator();
@@ -210,6 +237,10 @@
 
         if (currentCategoryId) {
             params.append('category_id', currentCategoryId);
+        }
+
+        if (currentSearchQuery) {
+            params.append('q', currentSearchQuery);
         }
 
         return `/api/repositories?${params.toString()}`;
@@ -363,18 +394,20 @@
     }
 
     // ==================== 状态控制 ====================
-    function resetAndReload(categoryId) {
-        console.log('Resetting and reloading with category:', categoryId);
+    function resetAndReload(categoryId, searchQuery = null) {
+        console.log('Resetting and reloading with category:', categoryId, 'search:', searchQuery);
 
         // 更新分类ID
         if (categoryId !== undefined) {
             currentCategoryId = categoryId;
         }
 
+        // 设置搜索查询（如果提供）
+        currentSearchQuery = searchQuery;
+
         // 重置状态
         currentPage = 0;
         hasMore = true;
-        currentSearchQuery = null;
 
         // 清空内容
         clearRepositoryGrid();
@@ -382,8 +415,12 @@
         // 恢复标题
         updatePageTitle(currentCategoryId ? '分类仓库' : '最新入库');
 
-        // 启用无限滚动
-        enableInfiniteScroll();
+        // 如果有搜索查询，禁用无限滚动；否则启用
+        if (currentSearchQuery) {
+            disableInfiniteScroll();
+        } else {
+            enableInfiniteScroll();
+        }
 
         // 加载第一页
         loadNextPage();
