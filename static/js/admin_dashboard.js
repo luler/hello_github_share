@@ -1212,12 +1212,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Edit/Delete handlers
     function editCategory(c) {
-        let selectedParentId = c.parent_id;
+        // 从 allCategories（扁平列表）中获取完整的分类信息
+        // 因为树形结构中的子分类可能没有 parent_id 字段
+        const fullCategory = allCategories.find(cat => cat.id == c.id) || c;
+
+        // 初始化为当前的父级ID，确保默认选中当前父级
+        let selectedParentId = fullCategory.parent_id;
 
         openModal('修改分类', `
       <div class="form-group">
         <label>分类名称 <span style="color:red;">*</span></label>
-        <input type="text" id="modal-cat-name" value="${escapeHtml(c.name)}" style="width:100%; padding:8px; border:1px solid #d9d9d9; border-radius:4px;" />
+        <input type="text" id="modal-cat-name" value="${escapeHtml(fullCategory.name)}" style="width:100%; padding:8px; border:1px solid #d9d9d9; border-radius:4px;" />
       </div>
       <div class="form-group">
         <label>父级分类 <span style="color:#999; font-size:12px;">(可选)</span></label>
@@ -1234,16 +1239,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const name = (document.getElementById('modal-cat-name')?.value || '').trim();
             if (!name) throw new Error('请填写分类名称');
 
-            // 调用更新API
-            // 确保 parent_id 有明确的值，如果 selectedParentId 是 undefined，则使用 null
-            const parentId = selectedParentId === undefined ? c.parent_id : selectedParentId;
-
-            const res = await fetch(`/api/categories/${c.id}`, {
+            // 调用更新API，直接使用 selectedParentId（已初始化为当前父级ID）
+            const res = await fetch(`/api/categories/${fullCategory.id}`, {
                 method: 'PUT',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
                     name: name,
-                    parent_id: parentId
+                    parent_id: selectedParentId
                 })
             });
 
@@ -1276,7 +1278,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     return ids;
                 };
 
-                const invalidIds = getDescendantIds(c.id);
+                const invalidIds = getDescendantIds(fullCategory.id);
                 const filteredCats = cats.filter(cat => !invalidIds.includes(cat.id));
 
                 if (filteredCats.length === 0) {
@@ -1284,7 +1286,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // 即使没有可用父级，也可以清除当前父级
                     const clearBtn = document.getElementById('modal-edit-cat-clear');
-                    if (clearBtn && c.parent_id) {
+                    if (clearBtn && fullCategory.parent_id) {
                         clearBtn.addEventListener('click', () => {
                             selectedParentId = null;
                             if (selectedDisplay) {
@@ -1299,7 +1301,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
                     if (selectedDisplay) {
-                        if (c.parent_id) {
+                        if (fullCategory.parent_id) {
                             selectedDisplay.textContent = '当前有父级，但无其他可选父级（可点击"清除父级"按钮设为顶级分类）';
                             selectedDisplay.style.color = '#ff9800';
                         } else {
@@ -1314,10 +1316,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             selectedDisplay.textContent = `已选择: ${selected.name}`;
                             selectedDisplay.style.color = '#52c41a';
                         }
-                    }, c.parent_id);
+                    }, fullCategory.parent_id);
 
                     // 如果有当前父级且存在于过滤后的列表中，确保展开到该节点
-                    if (c.parent_id && filteredCats.find(cat => cat.id == c.parent_id)) {
+                    if (fullCategory.parent_id && filteredCats.find(cat => cat.id == fullCategory.parent_id)) {
                         // 展开路径到当前父级
                         const expandPath = (targetId) => {
                             const target = filteredCats.find(cat => cat.id == targetId);
@@ -1325,7 +1327,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 expandPath(target.parent_id);
                             }
                         };
-                        expandPath(c.parent_id);
+                        expandPath(fullCategory.parent_id);
                     }
 
                     // 添加清除按钮事件
@@ -1344,8 +1346,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
                     // 设置初始显示
-                    if (c.parent_id && selectedDisplay) {
-                        const parent = cats.find(cat => cat.id == c.parent_id);
+                    if (fullCategory.parent_id && selectedDisplay) {
+                        const parent = cats.find(cat => cat.id == fullCategory.parent_id);
                         if (parent) {
                             selectedDisplay.textContent = `当前父级: ${parent.name}`;
                             selectedDisplay.style.color = '#1890ff';
