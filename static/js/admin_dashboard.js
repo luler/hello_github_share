@@ -233,7 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
         overlay.id = 'modalOverlay';
         overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.4); display:none; align-items:center; justify-content:center; z-index:9999;';
         const panel = document.createElement('div');
-        panel.style.cssText = 'background:#fff; border-radius:10px; box-shadow:0 10px 25px rgba(0,0,0,0.2); width:480px; max-width:90%;';
+        panel.style.cssText = 'background:#fff; border-radius:10px; box-shadow:0 10px 25px rgba(0,0,0,0.2); width:640px; max-width:90%;';
         const header = document.createElement('div');
         header.style.cssText = 'padding:1rem 1.25rem; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;';
         const titleEl = document.createElement('h4');
@@ -275,6 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 延迟关闭,确保状态更新
             setTimeout(() => {
                 overlay.style.display = 'none';
+                document.body.style.overflow = '';  // 恢复滚动
                 isModalClosing = false;
             }, 50);
         };
@@ -334,6 +335,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         modal.overlay.style.display = 'flex';
+        document.body.style.overflow = 'hidden';  // 禁用滚动
     }
 
     // Populate category tree selectors
