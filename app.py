@@ -5,7 +5,7 @@ from typing import Optional, List
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, Request, Form, Query, BackgroundTasks
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -15,7 +15,6 @@ from auth import get_current_admin, create_access_token, authenticate_admin, ACC
 from database import SessionLocal, engine, get_db
 from llm_service import generate_repo_summary
 from models import Base, Category, Repository, Admin, Config
-
 
 # 全局变量：记录正在进行LLM摘要处理的仓库ID集合
 processing_repositories = set()
@@ -387,6 +386,56 @@ async def home(request: Request, category_id: Optional[int] = Query(None), db: S
         "category_name": category_name,
         "is_admin": _is_admin_request(request, db)
     })
+
+
+@app.get("/sitemap.xml")
+async def sitemap(request: Request, db: Session = Depends(get_db)):
+    """生成站点地图，包含首页和所有有仓库的分类页面"""
+    from datetime import datetime
+
+    base_url = str(request.base_url).rstrip('/')
+
+    # 获取所有有仓库的分类ID
+    categories_with_repos = db.query(Category).filter(
+        Category.repositories.any()
+    ).all()
+
+    # 构建 XML
+    xml_lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+    ]
+
+    # 添加首页
+    xml_lines.extend([
+        '  <url>',
+        f'    <loc>{base_url}/</loc>',
+        f'    <lastmod>{datetime.now().strftime("%Y-%m-%d")}</lastmod>',
+        '    <changefreq>daily</changefreq>',
+        '    <priority>1.0</priority>',
+        '  </url>'
+    ])
+
+    # 添加所有有仓库的分类页面
+    for category in categories_with_repos:
+        xml_lines.extend([
+            '  <url>',
+            f'    <loc>{base_url}/?category_id={category.id}</loc>',
+            f'    <lastmod>{datetime.now().strftime("%Y-%m-%d")}</lastmod>',
+            '    <changefreq>weekly</changefreq>',
+            '    <priority>0.8</priority>',
+            '  </url>'
+        ])
+
+    xml_lines.append('</urlset>')
+
+    xml_content = '\n'.join(xml_lines)
+
+    return Response(
+        content=xml_content,
+        media_type="application/xml",
+        headers={"Content-Type": "application/xml; charset=utf-8"}
+    )
 
 
 @app.get("/api/repositories")
