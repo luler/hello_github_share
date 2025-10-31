@@ -393,7 +393,16 @@ async def sitemap(request: Request, db: Session = Depends(get_db)):
     """生成站点地图，包含首页和所有有仓库的分类页面"""
     from datetime import datetime
 
-    base_url = str(request.base_url).rstrip('/')
+    # 兼容反向代理：优先使用 X-Forwarded-* 头信息，否则使用原始请求
+    proto = request.headers.get("X-Forwarded-Proto") or request.headers.get("X-Forwarded-Scheme") or str(
+        request.url.scheme)
+    host = request.headers.get("X-Forwarded-Host") or request.headers.get("Host") or str(request.url.hostname)
+
+    # 如果 host 包含端口号，保留它；否则不添加端口
+    if ":" not in host and request.url.port and request.url.port not in (80, 443):
+        host = f"{host}:{request.url.port}"
+
+    base_url = f"{proto}://{host}"
 
     # 获取所有有仓库的分类ID
     categories_with_repos = db.query(Category).filter(
