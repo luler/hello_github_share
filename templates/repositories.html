@@ -1,350 +1,350 @@
 {% extends "base.html" %}
 
 {% block title %}
-{% if category_name %}
-{{ category_name }} - GitHub 开源导航
-{% else %}
-仓库列表 - GitHub 开源导航
-{% endif %}
+    {% if category_name %}
+        {{ category_name }} - GitHub 开源导航
+    {% else %}
+        仓库列表 - GitHub 开源导航
+    {% endif %}
 {% endblock %}
 
 {% block meta_description %}
-{% if category_name %}
-精选{{ category_name }}分类下优质GitHub开源项目，包含{{ category_name }}相关的代码库和工具，助您快速找到合适的开源项目
-{% else %}
-精选GitHub开源项目导航，按分类整理优质开源代码库，帮助开发者快速找到合适的开源项目
-{% endif %}
+    {% if category_name %}
+        精选{{ category_name }}分类下优质GitHub开源项目，包含{{ category_name }}相关的代码库和工具，助您快速找到合适的开源项目
+    {% else %}
+        精选GitHub开源项目导航，按分类整理优质开源代码库，帮助开发者快速找到合适的开源项目
+    {% endif %}
 {% endblock %}
 
 {% block meta_keywords %}
-{% if category_name %}
-{{ category_name }},GitHub,开源,代码库,项目导航,开源项目
-{% else %}
-GitHub,开源,代码库,项目导航,开源项目,编程,开发
-{% endif %}
+    {% if category_name %}
+        {{ category_name }},GitHub,开源,代码库,项目导航,开源项目
+    {% else %}
+        GitHub,开源,代码库,项目导航,开源项目,编程,开发
+    {% endif %}
 {% endblock %}
 
 {% block og_title %}
-{% if category_name %}
-{{ category_name }} - GitHub 开源导航
-{% else %}
-GitHub 开源导航
-{% endif %}
+    {% if category_name %}
+        {{ category_name }} - GitHub 开源导航
+    {% else %}
+        GitHub 开源导航
+    {% endif %}
 {% endblock %}
 
 {% block og_description %}
-{% if category_name %}
-发现{{ category_name }}分类下的优质GitHub开源项目
-{% else %}
-精选GitHub开源项目导航，按分类整理优质开源代码库
-{% endif %}
+    {% if category_name %}
+        发现{{ category_name }}分类下的优质GitHub开源项目
+    {% else %}
+        精选GitHub开源项目导航，按分类整理优质开源代码库
+    {% endif %}
 {% endblock %}
 
 {% block content %}
-<div class="container layout-with-sidebar">
-    <aside class="left-sidebar">
-        <div class="sidebar-search-section">
-            <h3>仓库搜索</h3>
-            <div class="search-box">
-                <input type="text" id="repo-search-input" placeholder="搜索仓库..."/>
-            </div>
-            <h3>分类筛选</h3>
-            <div class="category-search-box">
-                <input type="text" id="category-search-input" placeholder="搜索分类..."/>
-            </div>
-        </div>
-        <div id="category-tree" data-selected-id="{{ selected_category or '' }}"></div>
-    </aside>
-    <div class="content-area">
-        <section class="repositories-section">
-            <div class="section-header">
-                <h2>{% if selected_category %}分类仓库{% else %}最新入库{% endif %}</h2>
-                <div class="header-actions">
-                    <span class="repo-count">共 0 个仓库</span>
+    <div class="container layout-with-sidebar">
+        <aside class="left-sidebar">
+            <div class="sidebar-search-section">
+                <h3>仓库搜索</h3>
+                <div class="search-box">
+                    <input type="text" id="repo-search-input" placeholder="搜索仓库..."/>
+                </div>
+                <h3>分类筛选</h3>
+                <div class="category-search-box">
+                    <input type="text" id="category-search-input" placeholder="搜索分类..."/>
                 </div>
             </div>
-            <div class="repositories-grid">
-                <!-- 仓库列表将通过JavaScript动态加载 -->
-            </div>
-        </section>
+            <div id="category-tree" data-selected-id="{{ selected_category or '' }}"></div>
+        </aside>
+        <div class="content-area">
+            <section class="repositories-section">
+                <div class="section-header">
+                    <h2>{% if selected_category %}分类仓库{% else %}最新入库{% endif %}</h2>
+                    <div class="header-actions">
+                        <span class="repo-count">共 0 个仓库</span>
+                    </div>
+                </div>
+                <div class="repositories-grid">
+                    <!-- 仓库列表将通过JavaScript动态加载 -->
+                </div>
+            </section>
+        </div>
     </div>
-</div>
 {% endblock %}
 
 {% block extra_css %}
-<style>
-    /* Sidebar tree layout */
-    .layout-with-sidebar {
-        display: grid;
-        grid-template-columns: 280px 1fr;
-        gap: 1.5rem;
-    }
-
-    .left-sidebar {
-        background: white;
-        border-radius: 10px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-        height: calc(100vh - 120px);
-        max-height: calc(100vh - 120px);
-        display: flex;
-        flex-direction: column;
-        position: sticky;
-        top: 90px;
-    }
-
-    .sidebar-search-section {
-        padding: 1rem;
-        border-bottom: 1px solid var(--gray-200);
-        flex-shrink: 0;
-    }
-
-    .sidebar-search-section h3 {
-        margin-bottom: 0.75rem;
-        color: var(--gray-800);
-        font-size: 1rem;
-    }
-
-    .category-search-box {
-        margin-bottom: 0.5rem;
-    }
-
-    #category-search-input {
-        width: 100%;
-        padding: 0.5rem 0.75rem;
-        border: 1px solid var(--gray-300);
-        border-radius: 6px;
-        font-size: 0.875rem;
-        transition: border-color 0.2s, box-shadow 0.2s;
-    }
-
-    #category-search-input:focus {
-        outline: none;
-        border-color: var(--primary);
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-    }
-
-    .left-sidebar h3 {
-        margin-bottom: 0.75rem;
-        color: var(--gray-800);
-        font-size: 1rem;
-    }
-
-    .search-box {
-        margin-bottom: 1rem;
-    }
-
-    #repo-search-input {
-        width: 100%;
-        padding: 0.5rem 0.75rem;
-        border: 1px solid var(--gray-300);
-        border-radius: 6px;
-        font-size: 0.875rem;
-        transition: border-color 0.2s, box-shadow 0.2s;
-    }
-
-    #repo-search-input:focus {
-        outline: none;
-        border-color: var(--primary);
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-    }
-
-    #category-tree {
-        flex: 1;
-        overflow-y: auto;
-        overflow-x: hidden;
-        padding: 0.5rem 0;
-    }
-
-    /* 自定义滚动条样式 - 更细的滚动条 */
-    #category-tree::-webkit-scrollbar {
-        width: 3px;
-    }
-
-    #category-tree::-webkit-scrollbar-track {
-        background: transparent;
-    }
-
-    #category-tree::-webkit-scrollbar-thumb {
-        background: var(--gray-300);
-        border-radius: 1.5px;
-    }
-
-    #category-tree::-webkit-scrollbar-thumb:hover {
-        background: var(--gray-400);
-    }
-
-    /* 滚动条紧贴右边框 */
-    #category-tree {
-        padding-right: 0.25rem;
-    }
-
-    .category-tree {
-        list-style: none;
-        padding-left: 0.75rem;
-        padding-right: 0.5rem;
-    }
-
-    .category-tree .tree-item {
-        margin: 0.25rem 0;
-    }
-
-    .tree-link {
-        display: inline-block;
-        padding: 0.25rem 0.5rem;
-        border-radius: 6px;
-        color: var(--gray-800);
-        text-decoration: none;
-    }
-
-    .tree-link:hover {
-        background: var(--gray-100);
-    }
-
-    .tree-link.active {
-        color: var(--primary);
-        font-weight: 600;
-    }
-
-    .category-subtree {
-        list-style: none;
-        padding-left: 1rem;
-    }
-
-    .repo-count {
-        color: var(--gray-500);
-        font-size: 0.85rem;
-    }
-
-    .content-area {
-        min-width: 0;
-    }
-
-    .section-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1.5rem;
-    }
-
-    .header-actions {
-        display: flex;
-        gap: 1rem;
-        align-items: center;
-    }
-
-    .empty-state {
-        text-align: center;
-        padding: 3rem 1rem;
-        color: var(--gray-500);
-        grid-column: 1 / -1;
-    }
-
-    .empty-state p {
-        font-size: 1.125rem;
-    }
-
-    /* Loading and No More Indicators */
-    .loading-indicator,
-    .no-more-indicator,
-    .error-indicator {
-        text-align: center;
-        padding: 2rem 1rem;
-        color: var(--gray-500);
-        font-size: 0.95rem;
-    }
-
-    .loading-indicator {
-        color: var(--primary);
-    }
-
-    .loading-indicator p::after {
-        content: "";
-        animation: loading-dots 1.5s infinite;
-    }
-
-    @keyframes loading-dots {
-        0%, 20% {
-            content: ".";
-        }
-        40% {
-            content: "..";
-        }
-        60%, 100% {
-            content: "...";
-        }
-    }
-
-    .no-more-indicator {
-        color: var(--gray-400);
-        border-top: 1px solid var(--gray-200);
-        margin-top: 2rem;
-    }
-
-    .error-indicator {
-        color: #dc2626;
-        background: #fee;
-        border-radius: 6px;
-    }
-
-    @media (max-width: 992px) {
+    <style>
+        /* Sidebar tree layout */
         .layout-with-sidebar {
-            grid-template-columns: 1fr;
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 1.5rem;
         }
 
         .left-sidebar {
-            position: static;
-            margin-bottom: 1rem;
-            height: auto;
-            max-height: none;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            height: calc(100vh - 120px);
+            max-height: calc(100vh - 120px);
+            display: flex;
             flex-direction: column;
+            position: sticky;
+            top: 90px;
         }
 
         .sidebar-search-section {
-            padding: 0.875rem;
+            padding: 1rem;
+            border-bottom: 1px solid var(--gray-200);
+            flex-shrink: 0;
         }
 
-        #category-tree {
-            max-height: none;
-            overflow-y: visible;
-            padding: 0.5rem 0;
+        .sidebar-search-section h3 {
+            margin-bottom: 0.75rem;
+            color: var(--gray-800);
+            font-size: 1rem;
         }
-    }
 
+        .category-search-box {
+            margin-bottom: 0.5rem;
+        }
 
-    @media (max-width: 768px) {
-        .left-sidebar {
-            padding: 0.875rem;
+        #category-search-input {
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid var(--gray-300);
+            border-radius: 6px;
+            font-size: 0.875rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        #category-search-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
 
         .left-sidebar h3 {
-            font-size: 0.95rem;
+            margin-bottom: 0.75rem;
+            color: var(--gray-800);
+            font-size: 1rem;
+        }
+
+        .search-box {
+            margin-bottom: 1rem;
+        }
+
+        #repo-search-input {
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid var(--gray-300);
+            border-radius: 6px;
+            font-size: 0.875rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        #repo-search-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        #category-tree {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 0.5rem 0;
+        }
+
+        /* 自定义滚动条样式 - 更细的滚动条 */
+        #category-tree::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        #category-tree::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #category-tree::-webkit-scrollbar-thumb {
+            background: var(--gray-300);
+            border-radius: 1.5px;
+        }
+
+        #category-tree::-webkit-scrollbar-thumb:hover {
+            background: var(--gray-400);
+        }
+
+        /* 滚动条紧贴右边框 */
+        #category-tree {
+            padding-right: 0.25rem;
+        }
+
+        .category-tree {
+            list-style: none;
+            padding-left: 0.75rem;
+            padding-right: 0.5rem;
+        }
+
+        .category-tree .tree-item {
+            margin: 0.25rem 0;
         }
 
         .tree-link {
-            font-size: 0.875rem;
-            padding: 0.2rem 0.4rem;
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
+            color: var(--gray-800);
+            text-decoration: none;
         }
 
-        .section-header h2 {
-            font-size: 1.5rem;
+        .tree-link:hover {
+            background: var(--gray-100);
         }
-    }
 
-    @media (max-width: 480px) {
+        .tree-link.active {
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .category-subtree {
+            list-style: none;
+            padding-left: 1rem;
+        }
+
+        .repo-count {
+            color: var(--gray-500);
+            font-size: 0.85rem;
+        }
+
+        .content-area {
+            min-width: 0;
+        }
+
         .section-header {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
         }
 
-        .section-header h2 {
-            font-size: 1.25rem;
+        .header-actions {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
         }
-    }
-</style>
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--gray-500);
+            grid-column: 1 / -1;
+        }
+
+        .empty-state p {
+            font-size: 1.125rem;
+        }
+
+        /* Loading and No More Indicators */
+        .loading-indicator,
+        .no-more-indicator,
+        .error-indicator {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: var(--gray-500);
+            font-size: 0.95rem;
+        }
+
+        .loading-indicator {
+            color: var(--primary);
+        }
+
+        .loading-indicator p::after {
+            content: "";
+            animation: loading-dots 1.5s infinite;
+        }
+
+        @keyframes loading-dots {
+            0%, 20% {
+                content: ".";
+            }
+            40% {
+                content: "..";
+            }
+            60%, 100% {
+                content: "...";
+            }
+        }
+
+        .no-more-indicator {
+            color: var(--gray-400);
+            border-top: 1px solid var(--gray-200);
+            margin-top: 2rem;
+        }
+
+        .error-indicator {
+            color: #dc2626;
+            background: #fee;
+            border-radius: 6px;
+        }
+
+        @media (max-width: 992px) {
+            .layout-with-sidebar {
+                grid-template-columns: 1fr;
+            }
+
+            .left-sidebar {
+                position: static;
+                margin-bottom: 1rem;
+                height: auto;
+                max-height: none;
+                flex-direction: column;
+            }
+
+            .sidebar-search-section {
+                padding: 0.875rem;
+            }
+
+            #category-tree {
+                max-height: none;
+                overflow-y: visible;
+                padding: 0.5rem 0;
+            }
+        }
+
+
+        @media (max-width: 768px) {
+            .left-sidebar {
+                padding: 0.875rem;
+            }
+
+            .left-sidebar h3 {
+                font-size: 0.95rem;
+            }
+
+            .tree-link {
+                font-size: 0.875rem;
+                padding: 0.2rem 0.4rem;
+            }
+
+            .section-header h2 {
+                font-size: 1.5rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .section-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+
+            .section-header h2 {
+                font-size: 1.25rem;
+            }
+        }
+    </style>
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/category_tree.js?v=11"></script>
-<script src="/static/js/repository_manager.js?v=8"></script>
+    <script src="/static/js/category_tree.js?v=13"></script>
+    <script src="/static/js/repository_manager.js?v=10"></script>
 {% endblock %}

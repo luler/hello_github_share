@@ -88,6 +88,15 @@
             // 清空搜索，恢复无限滚动
             currentSearchQuery = null;
             updateUrlParams(null); // 清空URL参数
+
+            // 恢复默认的页面标题和meta信息
+            if (window.updatePageMetadata) {
+                window.updatePageMetadata(null);
+            }
+            if (window.updatePageTitle) {
+                window.updatePageTitle(null);
+            }
+
             resetAndReload();
             return;
         }
@@ -124,9 +133,14 @@
             // 清空现有内容
             clearRepositoryGrid();
 
-            // 更新标题和数量
+            // 更新页面标题和数量
             updatePageTitle(`搜索结果: "${query}"`);
             updateRepoCount(data.total);
+
+            // 更新页面元数据（恢复默认，因为搜索时没有分类）
+            if (window.updatePageMetadata) {
+                window.updatePageMetadata(null);
+            }
 
             // 显示搜索结果
             if (data.items.length > 0) {
@@ -207,16 +221,22 @@
             const data = await response.json();
             console.log('Loaded', data.items.length, 'items, has_more:', data.has_more);
 
+            // 无论是否有数据，都要更新仓库总数
+            updateRepoCount(data.total);
+
             if (data.items.length > 0) {
                 appendRepositories(data.items);
                 currentPage = nextPage;
                 hasMore = data.has_more;
-                updateRepoCount(data.total);
             } else {
                 hasMore = false;
+                // 如果是第一页且没有数据，显示空状态
+                if (currentPage === 0) {
+                    showEmptyState('该分类下暂无仓库');
+                }
             }
 
-            if (!hasMore) {
+            if (!hasMore && currentPage > 0) {
                 showNoMoreIndicator();
             }
 
@@ -412,8 +432,30 @@
         // 清空内容
         clearRepositoryGrid();
 
-        // 恢复标题
-        updatePageTitle(currentCategoryId ? '分类仓库' : '最新入库');
+        // 根据情况更新页面标题和元数据
+        if (currentCategoryId) {
+            // 有分类时，从DOM获取分类名称并更新
+            const categoryName = window.getCategoryNameById ? window.getCategoryNameById(currentCategoryId) : null;
+            if (categoryName) {
+                if (window.updatePageMetadata) {
+                    window.updatePageMetadata(categoryName);
+                }
+                if (window.updatePageTitle) {
+                    window.updatePageTitle(categoryName);
+                }
+            } else {
+                // 如果获取不到分类名称，使用默认标题
+                updatePageTitle('分类仓库');
+            }
+        } else {
+            // 没有分类时，恢复默认
+            if (window.updatePageMetadata) {
+                window.updatePageMetadata(null);
+            }
+            if (window.updatePageTitle) {
+                window.updatePageTitle(null);
+            }
+        }
 
         // 如果有搜索查询，禁用无限滚动；否则启用
         if (currentSearchQuery) {
