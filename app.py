@@ -108,6 +108,39 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 
+# 获取 base URL 函数
+def get_base_url(request: Request) -> str:
+    """构造正确的 base URL（兼容反向代理）"""
+    proto = (request.headers.get("X-Forwarded-Proto")
+             or request.headers.get("X-Forwarded-Scheme")
+             or str(request.url.scheme))
+    host = (request.headers.get("X-Forwarded-Host")
+            or request.headers.get("Host")
+            or str(request.url.hostname))
+
+    # 如果 host 包含端口号，保留它；否则不添加端口
+    if ":" not in host and request.url.port and request.url.port not in (80, 443):
+        host = f"{host}:{request.url.port}"
+
+    return f"{proto}://{host}"
+
+
+# 获取当前页面的完整地址
+def get_full_url(request: Request) -> str:
+    """构造正确的 canonical URL（兼容反向代理）"""
+
+    # 构造完整的 canonical URL
+    canonical_url = f"{get_base_url(request)}{request.url.path}"
+    if request.url.query:
+        canonical_url += f"?{request.url.query}"
+
+    return canonical_url
+
+
+# 注册全局函数到 Jinja2 模板环境
+templates.env.globals['get_full_url'] = get_full_url
+
+
 class CategoryCreate(BaseModel):
     name: str
     parent_id: Optional[int] = None
@@ -393,16 +426,7 @@ async def sitemap(request: Request, db: Session = Depends(get_db)):
     """生成站点地图，包含首页和所有有仓库的分类页面"""
     from datetime import datetime
 
-    # 兼容反向代理：优先使用 X-Forwarded-* 头信息，否则使用原始请求
-    proto = request.headers.get("X-Forwarded-Proto") or request.headers.get("X-Forwarded-Scheme") or str(
-        request.url.scheme)
-    host = request.headers.get("X-Forwarded-Host") or request.headers.get("Host") or str(request.url.hostname)
-
-    # 如果 host 包含端口号，保留它；否则不添加端口
-    if ":" not in host and request.url.port and request.url.port not in (80, 443):
-        host = f"{host}:{request.url.port}"
-
-    base_url = f"{proto}://{host}"
+    base_url = get_base_url(request)
 
     # 获取所有有仓库的分类ID
     categories_with_repos = db.query(Category).filter(

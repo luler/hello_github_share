@@ -17,7 +17,7 @@
     <meta property="og:title" content="{% block og_title %}GitHub 开源导航{% endblock %}">
     <meta property="og:description"
           content="{% block og_description %}精选GitHub开源项目导航，按分类整理优质开源代码库{% endblock %}">
-    <meta property="og:url" content="{{ request.url }}">
+    <meta property="og:url" content="{{ get_full_url(request) }}">
     <meta property="og:site_name" content="GitHub 开源导航">
 
     <!-- Twitter -->
@@ -27,7 +27,7 @@
           content="{% block twitter_description %}精选GitHub开源项目导航，按分类整理优质开源代码库{% endblock %}">
 
     <!-- Canonical URL -->
-    <link rel="canonical" href="{{ request.url }}">
+    <link rel="canonical" href="{{ get_full_url(request) }}">
 
     <!-- Favicon -->
     <link rel="stylesheet" href="/static/css/style.css?v2">
