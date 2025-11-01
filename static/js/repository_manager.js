@@ -319,10 +319,35 @@
         img.style.objectFit = 'contain';
         img.alt = 'GitHub 信息卡片';
 
+        // 分类标签容器
+        const categoryTags = document.createElement('div');
+        categoryTags.className = 'category-tags';
+
+        // 如果有分类路径，显示所有分类标签
+        if (repo.category_path && repo.category_path.length > 0) {
+            repo.category_path.forEach((category, index) => {
+                const tag = document.createElement('span');
+                tag.className = 'category-tag';
+                tag.textContent = category.name;
+                tag.setAttribute('data-category-id', category.id);
+                tag.setAttribute('data-level', category.level);
+                categoryTags.appendChild(tag);
+
+                // 在标签之间添加分隔符（除了最后一个标签）
+                if (index < repo.category_path.length - 1) {
+                    const separator = document.createElement('span');
+                    separator.className = 'category-separator';
+                    separator.textContent = ' › ';
+                    categoryTags.appendChild(separator);
+                }
+            });
+        }
+
         // 组装元素
         cardEmbed.appendChild(img);
         card.appendChild(descElement);
         card.appendChild(cardEmbed);
+        card.appendChild(categoryTags);  // 在卡片底部添加分类标签
         link.appendChild(card);
 
         return link;

@@ -54,6 +54,18 @@ async def update_repository_llm_summary(repository_id: int, github_url: str):
 # 仓库对象转换公共函数
 def repository_to_dict(repo: Repository) -> dict:
     """将Repository对象转换为字典"""
+    # 构建分类路径（从根分类到当前分类）
+    category_path = []
+    if repo.category:
+        current_category = repo.category
+        while current_category:
+            category_path.insert(0, {
+                "id": current_category.id,
+                "name": current_category.name,
+                "level": current_category.level
+            })
+            current_category = current_category.parent
+
     return {
         "id": repo.id,
         "name": repo.name,
@@ -62,6 +74,7 @@ def repository_to_dict(repo: Repository) -> dict:
         "github_url": repo.github_url,
         "category_id": repo.category_id,
         "category_name": repo.category.name if repo.category else None,
+        "category_path": category_path,  # 完整的分类路径
         "card_url": repo.card_url,
         "description": repo.description,
         "is_processing": repo.id in processing_repositories
