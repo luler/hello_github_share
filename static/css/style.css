@@ -488,14 +488,6 @@ main {
     font-size: 0.875rem;
 }
 
-.repo-description {
-    color: var(--gray-700);
-    margin-bottom: 1rem;
-    line-height: 1.6;
-    flex-grow: 1;
-    font-size: 0.9rem;
-}
-
 .repo-link {
     display: inline-flex;
     align-items: center;
@@ -1057,6 +1049,13 @@ footer p {
 
     .repository-card h3 {
         font-size: 1.125rem;
+    }
+
+    .repo-description {
+        display: block;
+        -webkit-line-clamp: unset;
+        -webkit-box-orient: unset;
+        min-height: auto;
     }
 
     .container {
