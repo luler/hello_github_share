@@ -69,6 +69,43 @@
     <p>&copy; 2024 GitHub 开源导航</p>
 </footer>
 
+<!-- 回到顶部按钮 -->
+<button id="back-to-top" class="back-to-top" aria-label="回到顶部">
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="18 15 12 9 6 15"></polyline>
+    </svg>
+</button>
+
+<script>
+    // 回到顶部按钮功能
+    (function() {
+        const backToTopButton = document.getElementById('back-to-top');
+
+        // 监听滚动事件
+        window.addEventListener('scroll', function() {
+            if (window.pageYOffset > window.innerHeight) {
+                backToTopButton.classList.add('show');
+            } else {
+                backToTopButton.classList.remove('show');
+            }
+        });
+
+        // 平滑滚动回到顶部
+        backToTopButton.addEventListener('click', function() {
+            const scrollDuration = 800; // 滚动持续时间（毫秒）
+            const scrollStep = -window.pageYOffset / (scrollDuration / 15);
+
+            const scrollInterval = setInterval(function() {
+                if (window.pageYOffset !== 0) {
+                    window.scrollBy(0, scrollStep);
+                } else {
+                    clearInterval(scrollInterval);
+                }
+            }, 15);
+        });
+    })();
+</script>
+
 {% block extra_js %}{% endblock %}
 </body>
 </html>
