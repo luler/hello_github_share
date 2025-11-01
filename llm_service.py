@@ -74,6 +74,8 @@ async def generate_summary_with_llm(
             if response.status_code == 200:
                 result = response.json()
                 summary = result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+                if not summary:
+                    print('LLM 返回内容为空：', result)
                 return summary
             else:
                 print(f"OpenAI API 错误: {response.status_code} - {response.text}")

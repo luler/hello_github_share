@@ -1005,14 +1005,33 @@ document.addEventListener('DOMContentLoaded', () => {
     const addRepoBtn = document.getElementById('openAddRepository');
     if (addRepoBtn) addRepoBtn.addEventListener('click', () => {
         let selectedCategoryId = null;
+        let isBatchMode = false; // 默认单个模式
 
         openModal('添加仓库', `
       <div class="form-group">
+        <div style="display:flex; gap:0; margin-bottom:1rem; border:1px solid var(--gray-300); border-radius:6px; overflow:hidden;">
+          <button type="button" id="mode-single" class="btn btn-sm" style="flex:1; border-radius:0; border:none; background:var(--primary); color:white; border-right:1px solid var(--gray-300); transition:none;">单个</button>
+          <button type="button" id="mode-batch" class="btn btn-sm btn-secondary" style="flex:1; border-radius:0; border:none; background:white; color:var(--gray-700); transition:none;">批量</button>
+        </div>
+      </div>
+      <div class="form-group" id="single-url-group">
         <label>GitHub URL <span style="color:red;">*</span></label>
         <input type="url" id="modal-repo-url" placeholder="https://github.com/owner/repo" style="width:100%; padding:8px; border:1px solid #d9d9d9; border-radius:4px;" />
         <div style="margin-top:0.5rem; font-size:0.875rem; color:var(--gray-600);">仓库名称将自动从URL中提取</div>
       </div>
-      <div class="form-group">
+      <div class="form-group" id="batch-url-group" style="display:none;">
+        <label>GitHub URL <span style="color:red;">*</span> <span style="color:var(--gray-500); font-size:0.875rem; font-weight:normal;">(每行一个URL)</span></label>
+        <textarea id="modal-batch-urls" rows="4" placeholder="https://github.com/owner/repo1&#10;https://github.com/owner/repo2&#10;https://github.com/owner/repo3" style="width:100%; padding:8px; border:1px solid #d9d9d9; border-radius:4px; font-family:monospace; resize:vertical;"></textarea>
+        <div style="margin-top:0.5rem; padding:0.5rem; background:#e6f7ff; border:1px solid #91d5ff; border-radius:4px; font-size:0.875rem; color:#1890ff;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:0.25rem;">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+          已开启自动LLM摘要
+        </div>
+      </div>
+      <div class="form-group" id="single-description-group">
         <label>项目描述 <span id="modal-desc-required" style="color:red;">*</span></label>
         <textarea id="modal-repo-description" rows="4" placeholder="项目的主要功能和特点" style="width:100%; padding:8px; border:1px solid #d9d9d9; border-radius:4px; font-family:inherit; resize:vertical;"></textarea>
         <div style="display:flex; align-items:center; gap:0.75rem; margin-top:0.5rem; flex-wrap:wrap;">
@@ -1037,45 +1056,163 @@ document.addEventListener('DOMContentLoaded', () => {
         <div id="modal-repo-selected" style="margin-top:8px; color:#666; font-size:14px;">未选择</div>
       </div>
     `, async () => {
-            const github_url = (document.getElementById('modal-repo-url')?.value || '').trim();
-            const description = (document.getElementById('modal-repo-description')?.value || '').trim();
-            const autoLlmSummary = document.getElementById('modal-auto-llm-summary')?.checked || false;
+            // 批量模式处理
+            if (isBatchMode) {
+                const batchUrls = (document.getElementById('modal-batch-urls')?.value || '').trim();
 
-            if (!github_url || !selectedCategoryId) {
-                throw new Error('请填写GitHub URL并选择分类');
+                if (!batchUrls || !selectedCategoryId) {
+                    throw new Error('请填写GitHub URL并选择分类');
+                }
+
+                // 按行分割URL
+                const urls = batchUrls.split('\n').map(url => url.trim()).filter(url => url);
+
+                if (urls.length === 0) {
+                    throw new Error('请至少输入一个GitHub URL');
+                }
+
+                // 验证URL格式并提取仓库名称
+                const repos = [];
+                for (const github_url of urls) {
+                    const urlMatch = github_url.match(/github\.com\/([^\/]+\/[^\/]+)/);
+                    if (!urlMatch) {
+                        throw new Error(`无效的GitHub URL格式: ${github_url}`);
+                    }
+                    const name = urlMatch[1];
+                    repos.push({ name, github_url });
+                }
+
+                // 批量提交，循环调用现有接口
+                let successCount = 0;
+                let failCount = 0;
+                const errors = [];
+
+                for (const repo of repos) {
+                    try {
+                        const res = await fetch('/api/repositories', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json; charset=UTF-8'},
+                            body: JSON.stringify({
+                                name: repo.name,
+                                github_url: repo.github_url,
+                                category_id: selectedCategoryId,
+                                description: repo.github_url,
+                                auto_llm_summary: true // 批量模式默认开启自动LLM摘要
+                            })
+                        });
+
+                        if (res.ok) {
+                            successCount++;
+                        } else {
+                            failCount++;
+                            const errorData = await res.json().catch(() => ({}));
+                            errors.push(`${repo.github_url}: ${errorData.detail || '添加失败'}`);
+                        }
+                    } catch (error) {
+                        failCount++;
+                        errors.push(`${repo.github_url}: ${error.message}`);
+                    }
+                }
+
+                // 显示结果
+                if (failCount > 0) {
+                    alert(`批量添加完成！\n成功: ${successCount} 个\n失败: ${failCount} 个\n\n失败详情:\n${errors.join('\n')}`);
+                } else {
+                    alert(`批量添加成功！共添加 ${successCount} 个仓库`);
+                }
+
+                loadRepos();
+            } else {
+                // 单个模式处理（原有逻辑）
+                const github_url = (document.getElementById('modal-repo-url')?.value || '').trim();
+                const description = (document.getElementById('modal-repo-description')?.value || '').trim();
+                const autoLlmSummary = document.getElementById('modal-auto-llm-summary')?.checked || false;
+
+                if (!github_url || !selectedCategoryId) {
+                    throw new Error('请填写GitHub URL并选择分类');
+                }
+
+                // 根据是否勾选自动LLM摘要来决定描述的验证逻辑
+                if (!autoLlmSummary && !description) {
+                    throw new Error('请填写项目描述');
+                }
+
+                // 从URL中提取仓库名称
+                const urlMatch = github_url.match(/github\.com\/([^\/]+\/[^\/]+)/);
+                if (!urlMatch) {
+                    throw new Error('无效的GitHub URL格式');
+                }
+                const name = urlMatch[1]; // 例如: "owner/repo"
+
+                const res = await fetch('/api/repositories', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json; charset=UTF-8'},
+                    body: JSON.stringify({
+                        name,
+                        github_url,
+                        category_id: selectedCategoryId,
+                        description: description || github_url,
+                        auto_llm_summary: autoLlmSummary
+                    })
+                });
+
+                if (!res.ok) {
+                    const errorData = await res.json().catch(() => ({}));
+                    throw new Error(errorData.detail || '添加失败');
+                }
+
+                loadRepos();
             }
-
-            // 根据是否勾选自动LLM摘要来决定描述的验证逻辑
-            if (!autoLlmSummary && !description) {
-                throw new Error('请填写项目描述');
-            }
-
-            // 从URL中提取仓库名称
-            const urlMatch = github_url.match(/github\.com\/([^\/]+\/[^\/]+)/);
-            if (!urlMatch) {
-                throw new Error('无效的GitHub URL格式');
-            }
-            const name = urlMatch[1]; // 例如: "owner/repo"
-
-            const res = await fetch('/api/repositories', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json; charset=UTF-8'},
-                body: JSON.stringify({
-                    name,
-                    github_url,
-                    category_id: selectedCategoryId,
-                    description: description || github_url,
-                    auto_llm_summary: autoLlmSummary
-                })
-            });
-
-            if (!res.ok) {
-                const errorData = await res.json().catch(() => ({}));
-                throw new Error(errorData.detail || '添加失败');
-            }
-
-            loadRepos();
         });
+
+        // 模式切换按钮事件
+        setTimeout(() => {
+            const modeSingleBtn = document.getElementById('mode-single');
+            const modeBatchBtn = document.getElementById('mode-batch');
+            const singleUrlGroup = document.getElementById('single-url-group');
+            const batchUrlGroup = document.getElementById('batch-url-group');
+            const singleDescriptionGroup = document.getElementById('single-description-group');
+
+            if (modeSingleBtn && modeBatchBtn) {
+                // 禁用hover效果
+                const disableHover = (btn) => {
+                    btn.addEventListener('mouseenter', (e) => e.preventDefault());
+                    btn.style.transform = 'none';
+                };
+                disableHover(modeSingleBtn);
+                disableHover(modeBatchBtn);
+
+                // 切换到单个模式
+                modeSingleBtn.addEventListener('click', () => {
+                    isBatchMode = false;
+                    modeSingleBtn.style.background = 'var(--primary)';
+                    modeSingleBtn.style.color = 'white';
+                    modeSingleBtn.style.transform = 'none';
+                    modeBatchBtn.style.background = 'white';
+                    modeBatchBtn.style.color = 'var(--gray-700)';
+                    modeBatchBtn.style.transform = 'none';
+
+                    if (singleUrlGroup) singleUrlGroup.style.display = 'block';
+                    if (batchUrlGroup) batchUrlGroup.style.display = 'none';
+                    if (singleDescriptionGroup) singleDescriptionGroup.style.display = 'block';
+                });
+
+                // 切换到批量模式
+                modeBatchBtn.addEventListener('click', () => {
+                    isBatchMode = true;
+                    modeBatchBtn.style.background = 'var(--primary)';
+                    modeBatchBtn.style.color = 'white';
+                    modeBatchBtn.style.transform = 'none';
+                    modeSingleBtn.style.background = 'white';
+                    modeSingleBtn.style.color = 'var(--gray-700)';
+                    modeSingleBtn.style.transform = 'none';
+
+                    if (singleUrlGroup) singleUrlGroup.style.display = 'none';
+                    if (batchUrlGroup) batchUrlGroup.style.display = 'block';
+                    if (singleDescriptionGroup) singleDescriptionGroup.style.display = 'none';
+                });
+            }
+        }, 100);
 
         // 自动LLM摘要勾选框联动逻辑
         setTimeout(() => {
