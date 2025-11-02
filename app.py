@@ -1,3 +1,4 @@
+import asyncio
 import os
 from datetime import timedelta
 from typing import Optional, List
@@ -19,36 +20,49 @@ from models import Base, Category, Repository, Admin, Config
 # 全局变量：记录正在进行LLM摘要处理的仓库ID集合
 processing_repositories = set()
 
+# 全局异步锁：确保同时只有一个任务在执行LLM摘要
+llm_task_lock = asyncio.Lock()
+
 
 # 后台任务：异步更新仓库LLM摘要
 async def update_repository_llm_summary(repository_id: int, github_url: str):
     """
     后台任务：使用LLM生成摘要并更新仓库描述
+    使用异步锁确保同时只有一个任务在执行
     """
-    # 标记开始处理
+    # 标记开始处理（在获取锁之前）
     processing_repositories.add(repository_id)
 
-    db = SessionLocal()
-    try:
-        # 生成LLM摘要
-        result = await generate_repo_summary(github_url, db)
+    # 使用异步锁：确保同时只有一个任务在执行
+    async with llm_task_lock:
+        db = SessionLocal()
+        try:
+            print(f"🔒 获得执行锁，开始处理仓库 {repository_id}")
 
-        if result.get("success"):
-            # 更新仓库描述
-            repo = db.query(Repository).filter(Repository.id == repository_id).first()
-            if repo:
-                repo.description = result.get("summary", github_url)
-                db.commit()
-                print(f"成功为仓库 {repository_id} 更新LLM摘要")
-        else:
-            # LLM生成失败，保持原有描述（GitHub URL）
-            print(f"仓库 {repository_id} LLM摘要生成失败: {result.get('error')}")
-    except Exception as e:
-        print(f"后台任务更新仓库 {repository_id} 摘要时出错: {e}")
-    finally:
-        # 标记处理完成
-        processing_repositories.discard(repository_id)
-        db.close()
+            # 生成LLM摘要
+            result = await generate_repo_summary(github_url, db)
+
+            if result.get("success"):
+                # 更新仓库描述
+                repo = db.query(Repository).filter(Repository.id == repository_id).first()
+                if repo:
+                    repo.description = result.get("summary", github_url)
+                    db.commit()
+                    print(f"✅ 成功为仓库 {repository_id} 更新LLM摘要")
+            else:
+                # LLM生成失败，保持原有描述（GitHub URL）
+                print(f"⚠️  仓库 {repository_id} LLM摘要生成失败: {result.get('error')}")
+        except Exception as e:
+            print(f"❌ 后台任务更新仓库 {repository_id} 摘要时出错: {e}")
+            if db:
+                db.rollback()
+        finally:
+            # 确保数据库连接被关闭
+            if db:
+                db.close()
+            # 标记处理完成（释放锁之前）
+            processing_repositories.discard(repository_id)
+            print(f"🔓 释放执行锁，仓库 {repository_id} 处理完成")
 
 
 # 仓库对象转换公共函数
