@@ -12,7 +12,7 @@
     let isInfiniteScrollEnabled = true;
     let currentSearchQuery = null;
 
-    const PAGE_SIZE = 50;
+    const PAGE_SIZE = 20;
     const SCROLL_THRESHOLD = 0.7; // 70%
 
     // ==================== 初始化 ====================
