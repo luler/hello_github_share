@@ -60,12 +60,14 @@ set GITCARD_BASE_URL=https://yourdomain.com
 2. 创建分类（支持多级分类）
 3. 添加 GitHub 仓库（输入完整 URL）
 4. 系统自动解析并生成信息卡片
+![](example2.png)
 
 ### 用户操作
 
 1. 首页浏览最新仓库
 2. 使用左侧分类树筛选项目
 3. 点击仓库卡片查看详情
+![](example1.png)
 
 ## 注意事项
 
