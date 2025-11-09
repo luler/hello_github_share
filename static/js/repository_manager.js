@@ -292,6 +292,21 @@
         link.target = '_blank';
         link.className = 'repo-card-link';
 
+        // 创建原始卡片
+        const card = createCardContent(repo);
+
+        // 创建克隆卡片(用于悬停显示完整描述)
+        const cloneCard = createCardContent(repo, true);
+        cloneCard.classList.add('repository-card-clone');
+
+        // 组装元素
+        link.appendChild(card);
+        link.appendChild(cloneCard);
+
+        return link;
+    }
+
+    function createCardContent(repo, isClone = false) {
         // 创建卡片
         const card = document.createElement('div');
         card.className = 'repository-card';
@@ -302,10 +317,11 @@
         descElement.className = 'repo-description';
         if (description) {
             descElement.textContent = description;
-            descElement.title = description;
         } else {
             descElement.innerHTML = '&nbsp;';
-            descElement.style.minHeight = '4.32rem';
+            if (!isClone) {
+                descElement.style.minHeight = '4.32rem';
+            }
         }
 
         // GitHub 卡片
@@ -323,7 +339,7 @@
         const categoryTags = document.createElement('div');
         categoryTags.className = 'category-tags';
 
-        // 如果有分类路径，显示所有分类标签
+        // 如果有分类路径,显示所有分类标签
         if (repo.category_path && repo.category_path.length > 0) {
             repo.category_path.forEach((category, index) => {
                 const tag = document.createElement('span');
@@ -333,7 +349,7 @@
                 tag.setAttribute('data-level', category.level);
                 categoryTags.appendChild(tag);
 
-                // 在标签之间添加分隔符（除了最后一个标签）
+                // 在标签之间添加分隔符(除了最后一个标签)
                 if (index < repo.category_path.length - 1) {
                     const separator = document.createElement('span');
                     separator.className = 'category-separator';
@@ -347,10 +363,9 @@
         cardEmbed.appendChild(img);
         card.appendChild(descElement);
         card.appendChild(cardEmbed);
-        card.appendChild(categoryTags);  // 在卡片底部添加分类标签
-        link.appendChild(card);
+        card.appendChild(categoryTags);
 
-        return link;
+        return card;
     }
 
     function updateRepoCount(total) {
