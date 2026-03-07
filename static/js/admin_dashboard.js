@@ -186,6 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tabRepo.classList.add('btn-success');
         tabCategory.classList.remove('btn-success');
         document.getElementById('openAddRepository').style.display = 'inline-block';
+        document.getElementById('batchLlmSummary').style.display = 'inline-block';
         document.getElementById('openAddCategory').style.display = 'none';
 
         // 更新URL参数
@@ -206,6 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tabRepo.classList.remove('btn-success');
         document.getElementById('openAddCategory').style.display = 'inline-block';
         document.getElementById('openAddRepository').style.display = 'none';
+        document.getElementById('batchLlmSummary').style.display = 'none';
 
         // 停止仓库列表的定时刷新（因为已经不在仓库管理tab）
         stopRepoAutoRefresh();
@@ -734,6 +736,7 @@ document.addEventListener('DOMContentLoaded', () => {
         table.innerHTML = `
       <thead>
         <tr>
+          <th style="width: 40px; text-align: center;"><input type="checkbox" id="repo-select-all" title="全选/取消全选" /></th>
           <th style="width: 60px;">ID</th>
           <th style="width: 180px;">仓库名称</th>
           <th style="width: 320px;">信息卡片</th>
@@ -764,6 +767,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
 
             tr.innerHTML = `
+        <td style="text-align: center;"><input type="checkbox" class="repo-row-checkbox" data-repo-id="${r.id}" /></td>
         <td class="col-id">${r.id}</td>
         <td class="col-name"><a href="${escapeHtml(r.github_url)}" target="_blank" style="color: var(--primary); text-decoration: none;">${escapeHtml(r.name)}</a></td>
         <td class="col-card-url">${cardUrlContent}</td>
@@ -779,6 +783,26 @@ document.addEventListener('DOMContentLoaded', () => {
             tr.querySelector('[data-action="edit"]').addEventListener('click', () => editRepo(r));
             tr.querySelector('[data-action="delete"]').addEventListener('click', () => deleteRepo(r));
             tbody.appendChild(tr);
+        });
+
+        // 全选/取消全选
+        const selectAllCb = table.querySelector('#repo-select-all');
+        if (selectAllCb) {
+            selectAllCb.addEventListener('change', () => {
+                table.querySelectorAll('.repo-row-checkbox').forEach(cb => {
+                    cb.checked = selectAllCb.checked;
+                });
+                updateBatchLlmBtnText();
+            });
+        }
+        // 单行勾选时更新全选状态和按钮文字
+        table.addEventListener('change', (e) => {
+            if (e.target.classList.contains('repo-row-checkbox')) {
+                const allCbs = table.querySelectorAll('.repo-row-checkbox');
+                const checkedCbs = table.querySelectorAll('.repo-row-checkbox:checked');
+                if (selectAllCb) selectAllCb.checked = allCbs.length > 0 && allCbs.length === checkedCbs.length;
+                updateBatchLlmBtnText();
+            }
         });
 
         cont.appendChild(table);
@@ -799,6 +823,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             stopRepoAutoRefresh();
         }
+
+        // 表格重新渲染后，勾选已清空，同步更新按钮文字
+        updateBatchLlmBtnText();
     }
 
     // Event wiring for filters
@@ -1003,6 +1030,54 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const addRepoBtn = document.getElementById('openAddRepository');
+
+    // 批量LLM摘要按钮
+    const batchLlmBtn = document.getElementById('batchLlmSummary');
+
+    function getSelectedRepoIds() {
+        return Array.from(document.querySelectorAll('.repo-row-checkbox:checked')).map(cb => parseInt(cb.dataset.repoId));
+    }
+
+    function updateBatchLlmBtnText() {
+        if (!batchLlmBtn || batchLlmBtn.disabled) return;
+        const ids = getSelectedRepoIds();
+        batchLlmBtn.textContent = ids.length > 0 ? `批量LLM摘要 (${ids.length})` : '批量LLM摘要';
+    }
+
+    if (batchLlmBtn) batchLlmBtn.addEventListener('click', async () => {
+        const selectedIds = getSelectedRepoIds();
+        const hasSelection = selectedIds.length > 0;
+
+        const msg = hasSelection
+            ? `确定要为勾选的 ${selectedIds.length} 个仓库启动异步LLM摘要吗？（无论是否已有描述都会重新生成）`
+            : '确定要为所有未摘要的仓库启动异步LLM摘要吗？（处理所有描述为空或者描述等于仓库地址的项目）';
+        if (!confirm(msg)) return;
+
+        batchLlmBtn.disabled = true;
+        batchLlmBtn.textContent = '提交中...';
+        try {
+            const body = hasSelection ? JSON.stringify({repository_ids: selectedIds}) : '{}';
+            const res = await fetch('/api/repositories/batch-llm-summary', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: body
+            });
+            if (!res.ok) throw new Error('请求失败');
+            const data = await res.json();
+            if (data.count > 0) {
+                alert(`已将 ${data.count} 个仓库放入异步LLM摘要队列`);
+                loadRepos();
+            } else {
+                alert('没有需要进行LLM摘要的仓库');
+            }
+        } catch (e) {
+            alert('批量LLM摘要请求失败: ' + e.message);
+        } finally {
+            batchLlmBtn.disabled = false;
+            updateBatchLlmBtnText();
+        }
+    });
+
     if (addRepoBtn) addRepoBtn.addEventListener('click', () => {
         let selectedCategoryId = null;
         let isBatchMode = false; // 默认单个模式
@@ -1079,7 +1154,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         throw new Error(`无效的GitHub URL格式: ${github_url}`);
                     }
                     const name = urlMatch[1];
-                    repos.push({ name, github_url });
+                    repos.push({name, github_url});
                 }
 
                 // 批量提交，循环调用现有接口

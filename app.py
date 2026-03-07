@@ -833,6 +833,47 @@ async def update_configs(
 
 
 # ========== LLM 摘要 API ==========
+@app.post("/api/repositories/batch-llm-summary")
+async def batch_llm_summary(
+        request: Request,
+        background_tasks: BackgroundTasks,
+        db: Session = Depends(get_db)
+):
+    """批量为仓库启动异步LLM摘要"""
+    token = request.cookies.get("access_token")
+    try:
+        _ = get_current_admin(token, db)
+    except Exception:
+        raise HTTPException(status_code=401, detail="未授权")
+
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    repository_ids = body.get("repository_ids")
+
+    if repository_ids:
+        # 指定了仓库ID：不管描述，直接处理（排除正在处理中的）
+        repos = db.query(Repository).filter(Repository.id.in_(repository_ids)).all()
+        pending = [r for r in repos if r.id not in processing_repositories]
+    else:
+        # 未指定：查找描述为空、或描述等于仓库地址的仓库
+        repos = db.query(Repository).all()
+        pending = []
+        for repo in repos:
+            if repo.id in processing_repositories:
+                continue
+            desc = (repo.description or "").strip()
+            if not desc or desc == repo.github_url:
+                pending.append(repo)
+
+    for repo in pending:
+        background_tasks.add_task(
+            update_repository_llm_summary,
+            repo.id,
+            repo.github_url
+        )
+
+    return {"count": len(pending)}
+
+
 @app.post("/api/repositories/generate-summary")
 async def api_generate_summary(
         data: dict,
