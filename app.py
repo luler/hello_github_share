@@ -5,7 +5,7 @@ from typing import Optional, List
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, HTTPException, Request, Form, Query, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, Request, Form, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -20,49 +20,54 @@ from models import Base, Category, Repository, Admin, Config
 # 全局变量：记录正在进行LLM摘要处理的仓库ID集合
 processing_repositories = set()
 
-# 全局异步锁：确保同时只有一个任务在执行LLM摘要
-llm_task_lock = asyncio.Lock()
+# 全局队列 + worker：替代 asyncio.Lock 避免大量协程堆积拖慢事件循环
+llm_task_queue: asyncio.Queue = None  # 在 startup 事件中初始化（需要事件循环）
+llm_worker_task: asyncio.Task = None
 
 
-# 后台任务：异步更新仓库LLM摘要
-async def update_repository_llm_summary(repository_id: int, github_url: str):
-    """
-    后台任务：使用LLM生成摘要并更新仓库描述
-    使用异步锁确保同时只有一个任务在执行
-    """
-    # 标记开始处理（在获取锁之前）
-    processing_repositories.add(repository_id)
+async def _do_llm_summary(repository_id: int, github_url: str):
+    """执行单个仓库的 LLM 摘要生成"""
+    db = SessionLocal()
+    try:
+        print(f"开始处理仓库 {repository_id} 的LLM摘要")
 
-    # 使用异步锁：确保同时只有一个任务在执行
-    async with llm_task_lock:
-        db = SessionLocal()
+        result = await generate_repo_summary(github_url, db)
+
+        if result.get("success"):
+            repo = db.query(Repository).filter(Repository.id == repository_id).first()
+            if repo:
+                repo.description = result.get("summary", github_url)
+                db.commit()
+                print(f"成功为仓库 {repository_id} 更新LLM摘要")
+        else:
+            print(f"仓库 {repository_id} LLM摘要生成失败: {result.get('error')}")
+    except Exception as e:
+        print(f"后台任务更新仓库 {repository_id} 摘要时出错: {e}")
+        if db:
+            db.rollback()
+    finally:
+        if db:
+            db.close()
+
+
+async def _llm_worker():
+    """单个常驻 worker，从队列逐个取任务执行，不会产生协程堆积"""
+    while True:
+        repository_id, github_url = await llm_task_queue.get()
         try:
-            print(f"🔒 获得执行锁，开始处理仓库 {repository_id}")
-
-            # 生成LLM摘要
-            result = await generate_repo_summary(github_url, db)
-
-            if result.get("success"):
-                # 更新仓库描述
-                repo = db.query(Repository).filter(Repository.id == repository_id).first()
-                if repo:
-                    repo.description = result.get("summary", github_url)
-                    db.commit()
-                    print(f"✅ 成功为仓库 {repository_id} 更新LLM摘要")
-            else:
-                # LLM生成失败，保持原有描述（GitHub URL）
-                print(f"⚠️  仓库 {repository_id} LLM摘要生成失败: {result.get('error')}")
+            await _do_llm_summary(repository_id, github_url)
         except Exception as e:
-            print(f"❌ 后台任务更新仓库 {repository_id} 摘要时出错: {e}")
-            if db:
-                db.rollback()
+            print(f"LLM worker 异常: {e}")
         finally:
-            # 确保数据库连接被关闭
-            if db:
-                db.close()
-            # 标记处理完成（释放锁之前）
             processing_repositories.discard(repository_id)
-            print(f"🔓 释放执行锁，仓库 {repository_id} 处理完成")
+            llm_task_queue.task_done()
+
+
+def enqueue_llm_summary(repository_id: int, github_url: str):
+    """将 LLM 摘要任务入队（去重），不创建额外协程"""
+    if repository_id not in processing_repositories:
+        processing_repositories.add(repository_id)
+        llm_task_queue.put_nowait((repository_id, github_url))
 
 
 # 仓库对象转换公共函数
@@ -130,6 +135,27 @@ def init_default_admin():
 
 # 启动时初始化默认管理员
 init_default_admin()
+
+
+@app.on_event("startup")
+async def startup_llm_worker():
+    """启动 LLM 摘要 worker"""
+    global llm_task_queue, llm_worker_task
+    llm_task_queue = asyncio.Queue()
+    llm_worker_task = asyncio.create_task(_llm_worker())
+
+
+@app.on_event("shutdown")
+async def shutdown_llm_worker():
+    """优雅停止 LLM 摘要 worker"""
+    global llm_worker_task
+    if llm_worker_task:
+        llm_worker_task.cancel()
+        try:
+            await llm_worker_task
+        except asyncio.CancelledError:
+            pass
+
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
@@ -560,7 +586,6 @@ async def list_repositories(
 @app.post("/api/repositories")
 async def create_repository(
         repository: RepositoryCreate,
-        background_tasks: BackgroundTasks,
         current_admin: Admin = Depends(get_current_admin),
         db: Session = Depends(get_db)
 ):
@@ -610,13 +635,9 @@ async def create_repository(
     db.commit()
     db.refresh(db_repository)
 
-    # 如果启用了自动LLM摘要，添加后台任务
+    # 如果启用了自动LLM摘要，入队处理
     if repository.auto_llm_summary:
-        background_tasks.add_task(
-            update_repository_llm_summary,
-            db_repository.id,
-            repository.github_url
-        )
+        enqueue_llm_summary(db_repository.id, repository.github_url)
 
     return {"id": db_repository.id, "name": db_repository.name, "github_url": db_repository.github_url}
 
@@ -836,7 +857,6 @@ async def update_configs(
 @app.post("/api/repositories/batch-llm-summary")
 async def batch_llm_summary(
         request: Request,
-        background_tasks: BackgroundTasks,
         db: Session = Depends(get_db)
 ):
     """批量为仓库启动异步LLM摘要"""
@@ -865,11 +885,7 @@ async def batch_llm_summary(
                 pending.append(repo)
 
     for repo in pending:
-        background_tasks.add_task(
-            update_repository_llm_summary,
-            repo.id,
-            repo.github_url
-        )
+        enqueue_llm_summary(repo.id, repo.github_url)
 
     return {"count": len(pending)}
 
