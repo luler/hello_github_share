@@ -21,10 +21,41 @@ gitshare_url = 'http://127.0.0.1:8000'
 gitshare_admin_name = 'admin'
 gitshare_admin_pass = 'admin123'
 
+BOOKMARK_ROOT_SEGMENT_ALIASES = {
+    'ToolbarFolder': {'ToolbarFolder', 'Bookmarks Bar', '书签栏', '收藏夹栏', 'root_____bar'},
+    'OtherBookmarks': {'OtherBookmarks', 'Other Bookmarks', '其他书签', '其它书签', 'root_____other'}
+}
+
 
 def fetch_bookmarkhub_content() -> dict:
     with urllib.request.urlopen(bookmarkhub_content_url, timeout=30) as resp:
         return json.loads(resp.read().decode('utf-8'))
+
+
+def get_bookmark_roots(content: dict) -> List[dict]:
+    roots = content.get('bookmarks')
+    if isinstance(roots, list):
+        return roots
+
+    roots = content.get('nodes')
+    if isinstance(roots, list):
+        return roots
+
+    return []
+
+
+def node_matches_segment(node: dict, seg: str) -> bool:
+    title = (node.get('title') or '').strip()
+    node_id = (node.get('id') or '').strip()
+
+    if title == seg or node_id == seg:
+        return True
+
+    aliases = BOOKMARK_ROOT_SEGMENT_ALIASES.get(seg)
+    if aliases and (title in aliases or node_id in aliases):
+        return True
+
+    return False
 
 
 def find_node_by_path(bookmarks: List[dict], path_expr: str) -> Optional[dict]:
@@ -38,7 +69,7 @@ def find_node_by_path(bookmarks: List[dict], path_expr: str) -> Optional[dict]:
     for seg in segments:
         matched = None
         for item in current_list:
-            if item.get('title') == seg:
+            if node_matches_segment(item, seg):
                 matched = item
                 break
         if not matched:
@@ -237,7 +268,7 @@ def delete_empty_categories(opener: urllib.request.OpenerDirector, cat_map: Dict
 def main():
     try:
         content = fetch_bookmarkhub_content()
-        root_node = find_node_by_path(content.get('bookmarks') or [], bookmarkhub_base_path)
+        root_node = find_node_by_path(get_bookmark_roots(content), bookmarkhub_base_path)
 
         if not root_node:
             raise RuntimeError(f'未找到路径: {bookmarkhub_base_path}')
